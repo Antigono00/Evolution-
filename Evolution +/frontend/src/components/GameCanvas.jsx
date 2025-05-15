@@ -1,33 +1,36 @@
-// src/components/GameCanvas.jsx - Update with MyCreaturesPanel integration
+// src/components/GameCanvas.jsx - Refactored version
 import { useContext, useEffect, useRef, useState } from 'react';
 import { GameContext } from '../context/GameContext';
-// Import from your RadixConnectContext
 import { useRadixConnect } from '../context/RadixConnectContext';
 import IncubatorWidget from './IncubatorWidget';
 import FomoHitMinter from './FomoHitMinter';
 import RoomNavigation from './RoomNavigation';
 import PetBuyPrompt from './PetBuyPrompt';
 import PetInteractionMenu from './PetInteractionMenu';
-import EvolvingCreatureMinter from './EvolvingCreatureMinter';
-import MyCreaturesPanel from './MyCreaturesPanel';
+// Import the new components we created
+import GameCanvasRenderer from './GameCanvasRenderer';
+import GameInteractions from './GameInteractions';
+import EvolvingCreaturesManager from './EvolvingCreaturesManager';
 
 const GameCanvas = () => {
+  // Refs
   const canvasRef = useRef(null);
-  const gameContainerRef = useRef(null); // Add ref for game container
+  const gameContainerRef = useRef(null);
   const requestRef = useRef(null);
   const assetsRef = useRef({
     backgroundImage: null,
-    background2Image: null, // Added second room background
+    background2Image: null,
     playerImage: null,
     catsLairImage: null,
     reactorImage: null,
     amplifierImage: null,
     incubatorImage: null,
     fomoHitImage: null,
-    catImage: null, // Add cat pet image
+    catImage: null,
     loaded: false
   });
 
+  // Get context from GameContext
   const {
     isLoggedIn,
     machines,
@@ -65,42 +68,36 @@ const GameCanvas = () => {
     setInPetMoveMode,
     getPetAtPosition,
     handleCatLairActivation,
-    // Evolving Creatures modal state
-    showCreatureMinter,
-    setShowCreatureMinter
   } = useContext(GameContext);
 
-  // Get Radix connection state from the RadixConnect context
+  // Get Radix connection state
   const {
     connected: isRadixConnected,
     accounts: radixAccounts,
     updateAccountSharing
   } = useRadixConnect();
 
-  // Keyboard state
-  const [keys, setKeys] = useState({});
+  // Initialize the GameInteractions
+  const interactions = GameInteractions();
 
-  // Mobile state
+  // State
+  const [keys, setKeys] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [targetX, setTargetX] = useState(player.x);
   const [targetY, setTargetY] = useState(player.y);
   const [autoTargetMachine, setAutoTargetMachine] = useState(null);
   const [autoPetTarget, setAutoPetTarget] = useState(null);
 
-  // Incubator widget state
+  // Widget states
   const [showIncubatorWidget, setShowIncubatorWidget] = useState(false);
   const [selectedIncubator, setSelectedIncubator] = useState(null);
-  
-  // FOMO HIT minter state
   const [showFomoHitMinter, setShowFomoHitMinter] = useState(false);
   const [selectedFomoHit, setSelectedFomoHit] = useState(null);
-  
-  // Pet state
   const [showPetBuyPrompt, setShowPetBuyPrompt] = useState(false);
   const [selectedCatLair, setSelectedCatLair] = useState(null);
   const [showPetInteractionMenu, setShowPetInteractionMenu] = useState(false);
   const [selectedPet, setSelectedPet] = useState(null);
-  
+
   // Machine movement state
   const [movingMachine, setMovingMachine] = useState(null);
   const [moveTargetRoom, setMoveTargetRoom] = useState(currentRoom);
@@ -108,25 +105,20 @@ const GameCanvas = () => {
   const [showMovePreview, setShowMovePreview] = useState(false);
   const [moveConfirmationOpen, setMoveConfirmationOpen] = useState(false);
   const [moveInstructionsVisible, setMoveInstructionsVisible] = useState(false);
-  
-  // Add state to track if position is selected
   const [positionSelected, setPositionSelected] = useState(false);
-  
-  // Add state for My Creatures Panel
-  const [showMyCreaturesPanel, setShowMyCreaturesPanel] = useState(false);
 
   // Load assets on mount
   useEffect(() => {
     const imageSources = {
       backgroundImage: '/assets/Background.png',
-      background2Image: '/assets/Background2.png', // Added second room background
+      background2Image: '/assets/Background2.png',
       playerImage: '/assets/Player.png',
       catsLairImage: '/assets/CatsLair.png',
       reactorImage: '/assets/Reactor.png',
       amplifierImage: '/assets/Amplifier.png',
       incubatorImage: '/assets/Incubator.png',
       fomoHitImage: '/assets/FomoHit.png',
-      catImage: '/assets/Cat.png' // Add cat pet image
+      catImage: '/assets/Cat.png'
     };
 
     const loadImage = (src) => {
@@ -140,7 +132,6 @@ const GameCanvas = () => {
         };
         img.onerror = (err) => {
           console.error(`Failed to load image: ${src}, using fallback`, err);
-          // Return null so we know to use fallback rendering
           resolve(null);
         };
       });
@@ -304,7 +295,7 @@ const GameCanvas = () => {
         }
         
         // Otherwise activate nearest machine or pet
-        const nearestMachine = findClosestMachineInRange();
+        const nearestMachine = interactions.findClosestMachineInRange();
         if (nearestMachine) {
           if (nearestMachine.type === 'incubator') {
             handleIncubatorInteraction(nearestMachine);
@@ -317,7 +308,7 @@ const GameCanvas = () => {
           }
         } else {
           // Check if there's a pet nearby
-          const nearestPet = findClosestPetInRange();
+          const nearestPet = interactions.findClosestPetInRange();
           if (nearestPet) {
             setSelectedPet(nearestPet);
             setShowPetInteractionMenu(true);
@@ -441,114 +432,6 @@ const GameCanvas = () => {
     };
   }, [showMovePreview, canvasRef, gridSize, positionSelected, movingMachine]);
 
-  // Helper functions
-  const distance = (x1, y1, x2, y2) => {
-    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  };
-
-  const getPlayerCenter = () => {
-    return {
-      px: player.x + player.width / 2,
-      py: player.y + player.height / 2
-    };
-  };
-
-  const getMachineCenter = (m) => {
-    const half = gridSize;
-    return {
-      mx: m.x + half,
-      my: m.y + half
-    };
-  };
-  
-  const getPetCenter = (p) => {
-    const petSize = gridSize * 1.5;
-    return {
-      px: p.x + petSize / 2,
-      py: p.y + petSize / 2
-    };
-  };
-
-  const isPlayerInRangeOf = (entity, isEntity = 'machine') => {
-    const { px, py } = getPlayerCenter();
-    
-    if (isEntity === 'machine') {
-      const { mx, my } = getMachineCenter(entity);
-      return distance(px, py, mx, my) <= INTERACTION_RANGE;
-    } else {
-      const petCenter = getPetCenter(entity);
-      return distance(px, py, petCenter.px, petCenter.py) <= INTERACTION_RANGE;
-    }
-  };
-
-  const getMachineAtPosition = (x, y) => {
-    // Only consider machines in the current room
-    const currentRoomMachines = getMachinesInCurrentRoom();
-    const machineSize = gridSize * 2;
-    
-    return currentRoomMachines.find((m) => {
-      return (
-        x >= m.x &&
-        x < m.x + machineSize &&
-        y >= m.y &&
-        y < m.y + machineSize
-      );
-    });
-  };
-  
-  // Combine check for machines and pets to avoid duplicate code
-  const getMachineOrPetAtPosition = (x, y) => {
-    // First check if there's a machine at this position
-    const machine = getMachineAtPosition(x, y);
-    if (machine) return { type: 'machine', entity: machine };
-    
-    // If not, check if there's a pet at this position
-    const pet = getPetAtPosition(x, y);
-    if (pet) return { type: 'pet', entity: pet };
-    
-    return null;
-  };
-
-  const findClosestMachineInRange = () => {
-    const { px, py } = getPlayerCenter();
-    let bestMachine = null;
-    let bestDist = Infinity;
-
-    // Only consider machines in the current room
-    const currentRoomMachines = getMachinesInCurrentRoom();
-    
-    currentRoomMachines.forEach((m) => {
-      const { mx, my } = getMachineCenter(m);
-      const dist = distance(px, py, mx, my);
-      if (dist < bestDist && dist <= INTERACTION_RANGE) {
-        bestDist = dist;
-        bestMachine = m;
-      }
-    });
-
-    return bestMachine;
-  };
-  
-  const findClosestPetInRange = () => {
-    const { px, py } = getPlayerCenter();
-    let bestPet = null;
-    let bestDist = Infinity;
-
-    // Only consider pets in the current room
-    const currentRoomPets = getPetsInCurrentRoom();
-    
-    currentRoomPets.forEach((p) => {
-      const petCenter = getPetCenter(p);
-      const dist = distance(px, py, petCenter.px, petCenter.py);
-      if (dist < bestDist && dist <= INTERACTION_RANGE) {
-        bestDist = dist;
-        bestPet = p;
-      }
-    });
-
-    return bestPet;
-  };
-
   // Handle incubator interaction
   const handleIncubatorInteraction = (machine) => {
     console.log('handleIncubatorInteraction called for machine:', machine);
@@ -611,9 +494,9 @@ const GameCanvas = () => {
     // Don't auto walk if in move mode
     if (inMoveMode || inPetMoveMode || showMovePreview) return;
     
-    const { px, py } = getPlayerCenter();
-    const { mx, my } = getMachineCenter(machine);
-    const distVal = distance(px, py, mx, my);
+    const { px, py } = interactions.getPlayerCenter();
+    const { mx, my } = interactions.getMachineCenter(machine);
+    const distVal = interactions.distance(px, py, mx, my);
 
     if (distVal <= INTERACTION_RANGE) {
       if (machine.type === 'incubator') {
@@ -637,9 +520,9 @@ const GameCanvas = () => {
     // Don't auto walk if in move mode
     if (inMoveMode || inPetMoveMode || showMovePreview) return;
     
-    const { px, py } = getPlayerCenter();
-    const petCenter = getPetCenter(pet);
-    const distVal = distance(px, py, petCenter.px, petCenter.py);
+    const { px, py } = interactions.getPlayerCenter();
+    const petCenter = interactions.getPetCenter(pet);
+    const distVal = interactions.distance(px, py, petCenter.px, petCenter.py);
 
     if (distVal <= INTERACTION_RANGE) {
       // We're already in range, show the pet interaction menu
@@ -690,7 +573,7 @@ const GameCanvas = () => {
     setPositionSelected(false); // Reset position selected state
   };
   
-  // Handle pet move confirmation - IMPROVED VERSION
+  // Handle pet move confirmation
   const handlePetMoveConfirm = async () => {
     if (!selectedPetToMove) return;
     
@@ -797,7 +680,7 @@ const GameCanvas = () => {
       return;
     }
     
-    // Handle pet move mode - UPDATED VERSION
+    // Handle pet move mode
     if (inPetMoveMode && selectedPetToMove && showMovePreview) {
       // If position already selected, first reset it
       if (positionSelected) {
@@ -839,6 +722,29 @@ const GameCanvas = () => {
     }
 
     // Check if clicked on machine or pet
+    const getMachineOrPetAtPosition = (x, y) => {
+      // First check if there's a machine at this position
+      const currentRoomMachines = getMachinesInCurrentRoom();
+      const machineSize = gridSize * 2;
+      
+      const machine = currentRoomMachines.find((m) => {
+        return (
+          x >= m.x &&
+          x < m.x + machineSize &&
+          y >= m.y &&
+          y < m.y + machineSize
+        );
+      });
+      
+      if (machine) return { type: 'machine', entity: machine };
+      
+      // If not, check if there's a pet at this position
+      const pet = getPetAtPosition(x, y);
+      if (pet) return { type: 'pet', entity: pet };
+      
+      return null;
+    };
+
     const clickedEntity = getMachineOrPetAtPosition(x, y);
 
     if (clickedEntity) {
@@ -887,7 +793,7 @@ const GameCanvas = () => {
     ) {
       const dx = targetX - newPlayer.x;
       const dy = targetY - newPlayer.y;
-      const distVal = distance(newPlayer.x, newPlayer.y, targetX, targetY);
+      const distVal = interactions.distance(newPlayer.x, newPlayer.y, targetX, targetY);
 
       if (distVal > 1) {
         const step = Math.min(newPlayer.maxSpeed, distVal);
@@ -899,7 +805,7 @@ const GameCanvas = () => {
           newPlayer.facingRight = dx > 0;
         }
       } else if (autoTargetMachine) {
-        if (isPlayerInRangeOf(autoTargetMachine, 'machine')) {
+        if (interactions.isPlayerInRangeOf(autoTargetMachine, 'machine')) {
           if (autoTargetMachine.type === 'incubator') {
             handleIncubatorInteraction(autoTargetMachine);
           } else if (autoTargetMachine.type === 'fomoHit') {
@@ -913,7 +819,7 @@ const GameCanvas = () => {
         setAutoTargetMachine(null);
       } else if (autoPetTarget) {
         // Check if we've reached the pet
-        if (isPlayerInRangeOf(autoPetTarget, 'pet')) {
+        if (interactions.isPlayerInRangeOf(autoPetTarget, 'pet')) {
           setSelectedPet(autoPetTarget);
           setShowPetInteractionMenu(true);
         }
@@ -962,18 +868,33 @@ const GameCanvas = () => {
       // Clear canvas
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-      // Draw background
-      drawBackground(ctx);
-      // Draw machines
-      drawMachines(ctx);
-      // Draw pets - add this line
-      drawPets(ctx);
-      // Draw player (don't draw player in move mode)
-      if (!showMovePreview) {
-        drawPlayer(ctx);
-      }
-      // Draw particles and notifications
-      drawParticlesAndNotifications(ctx);
+      // Use the GameCanvasRenderer to render the game
+      // This is done by directly manipulating the canvas context
+      // rather than using React's rendering system
+      
+      // The renderer component doesn't actually render itself in the DOM
+      // It just draws to the canvas context we provide
+      const renderer = (
+        <GameCanvasRenderer
+          canvasRef={canvasRef}
+          player={player}
+          currentRoom={currentRoom}
+          machines={machines}
+          pets={pets}
+          particles={particles}
+          notifications={notifications}
+          gridSize={gridSize}
+          assetsRef={assetsRef}
+          showMovePreview={showMovePreview}
+          moveCursorPosition={moveCursorPosition}
+          positionSelected={positionSelected}
+          movingMachine={movingMachine}
+          selectedPetToMove={selectedPetToMove}
+          inPetMoveMode={inPetMoveMode}
+          moveTargetRoom={moveTargetRoom}
+          machineTypes={machineTypes}
+        />
+      );
 
       // Move player (skip in move mode)
       if (!showMovePreview) {
@@ -1013,572 +934,6 @@ const GameCanvas = () => {
     inPetMoveMode
   ]);
 
-  // Draw functions
-  const drawBackground = (ctx) => {
-    // Select the appropriate background based on the current room
-    const bgImage = currentRoom === 1 
-      ? assetsRef.current.backgroundImage 
-      : assetsRef.current.background2Image;
-    
-    if (bgImage) {
-      try {
-        ctx.drawImage(
-          bgImage,
-          0,
-          0,
-          canvasRef.current.width,
-          canvasRef.current.height
-        );
-      } catch (error) {
-        console.error('Error drawing background:', error);
-        drawFallbackBackground(ctx);
-      }
-    } else {
-      drawFallbackBackground(ctx);
-    }
-  };
-
-  const drawFallbackBackground = (ctx) => {
-    // Different fallback background colors for different rooms
-    if (currentRoom === 1) {
-      ctx.fillStyle = '#1a1a1a';
-    } else {
-      ctx.fillStyle = '#262626'; // Slightly lighter for room 2
-    }
-    
-    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-    ctx.strokeStyle = currentRoom === 1 ? '#5555aa' : '#aa5555'; // Different color for room 2
-
-    // Vertical grid lines
-    for (let x = 0; x < canvasRef.current.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvasRef.current.height);
-      ctx.stroke();
-    }
-
-    // Horizontal grid lines
-    for (let y = 0; y < canvasRef.current.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvasRef.current.width, y);
-      ctx.stroke();
-    }
-    
-    // Add room number in background
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.font = 'bold 120px Orbitron';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`ROOM ${currentRoom}`, canvasRef.current.width / 2, canvasRef.current.height / 2);
-  };
-
-  const drawPlayer = (ctx) => {
-    if (!player) return;
-
-    ctx.save();
-    try {
-      if (assetsRef.current.playerImage) {
-        if (player.facingRight) {
-          ctx.translate(player.x + player.width, player.y);
-          ctx.scale(-1, 1);
-          ctx.drawImage(
-            assetsRef.current.playerImage,
-            0,
-            0,
-            player.width,
-            player.height
-          );
-        } else {
-          ctx.drawImage(
-            assetsRef.current.playerImage,
-            player.x,
-            player.y,
-            player.width,
-            player.height
-          );
-        }
-      } else {
-        ctx.fillStyle = '#4CAF50';
-        ctx.fillRect(player.x, player.y, player.width, player.height);
-
-        ctx.fillStyle = '#fff';
-        const eyeSize = 8;
-        const eyeY = player.y + player.height / 3;
-
-        if (player.facingRight) {
-          ctx.fillRect(player.x + player.width - 25, eyeY, eyeSize, eyeSize);
-          ctx.fillRect(player.x + player.width - 45, eyeY, eyeSize, eyeSize);
-        } else {
-          ctx.fillRect(player.x + 20, eyeY, eyeSize, eyeSize);
-          ctx.fillRect(player.x + 40, eyeY, eyeSize, eyeSize);
-        }
-      }
-    } catch (error) {
-      console.error('Error drawing player:', error);
-      ctx.fillStyle = '#4CAF50';
-      ctx.fillRect(player.x, player.y, player.width, player.height);
-    }
-    ctx.restore();
-  };
-
-  const drawMachines = (ctx) => {
-    // Get only machines in the current room
-    const currentRoomMachines = getMachinesInCurrentRoom();
-    
-    if (!currentRoomMachines || currentRoomMachines.length === 0) return;
-
-    const machineSize = gridSize * 2;
-    currentRoomMachines.forEach((m) => {
-      // Skip the machine that's being moved if it's in this room
-      if (movingMachine && m.id === movingMachine.id && currentRoom === movingMachine.room) return;
-      
-      // Try to get the appropriate image based on machine type
-      let img = null;
-      
-      // Only use the image if it was loaded successfully
-      if (m.type === 'catLair' && assetsRef.current.catsLairImage) {
-        img = assetsRef.current.catsLairImage;
-      } else if (m.type === 'reactor' && assetsRef.current.reactorImage) {
-        img = assetsRef.current.reactorImage;
-      } else if (m.type === 'amplifier' && assetsRef.current.amplifierImage) {
-        img = assetsRef.current.amplifierImage;
-      } else if (m.type === 'incubator' && assetsRef.current.incubatorImage) {
-        img = assetsRef.current.incubatorImage;
-      } else if (m.type === 'fomoHit' && assetsRef.current.fomoHitImage) {
-        img = assetsRef.current.fomoHitImage;
-      }
-
-      try {
-        // If we have an image, draw it, otherwise use fallback
-        if (img) {
-          ctx.drawImage(img, m.x, m.y, machineSize, machineSize);
-        } else {
-          // Fallback drawing for when image isn't available
-          const machineInfo = machineTypes[m.type] || {baseColor: '#555'};
-          const color = machineInfo.baseColor;
-          ctx.fillStyle = color;
-          ctx.fillRect(m.x, m.y, machineSize, machineSize);
-
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 14px Orbitron';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          
-          // Different text display for undefined vs known type
-          const displayText = machineInfo.name || m.type || 'Machine';
-          ctx.fillText(displayText, m.x + machineSize / 2, m.y + machineSize / 2);
-          
-          // Draw icon if available
-          if (machineInfo.icon) {
-            ctx.font = 'bold 24px Arial';
-            ctx.fillText(machineInfo.icon, m.x + machineSize / 2, m.y + machineSize / 4);
-          }
-        }
-      } catch (error) {
-        console.error(`Error drawing machine ${m.type}:`, error);
-        
-        // Last resort fallback
-        const color = machineTypes[m.type]?.baseColor || '#555';
-        ctx.fillStyle = color;
-        ctx.fillRect(m.x, m.y, machineSize, machineSize);
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(m.type || 'Machine', m.x + machineSize / 2, m.y + machineSize / 2);
-      }
-
-      // Level label - IMPROVED with higher z-index/priority
-      ctx.save();
-      const labelText = `Lvl ${m.level}`;
-      const labelWidth = 60;
-      const labelHeight = 18;
-      const labelX = m.x + machineSize / 2 - labelWidth / 2;
-      const labelY = m.y - labelHeight - 2;
-
-      // Draw with a semi-transparent black outline to make it visible against any background
-      // First draw a slightly larger black background for better visibility
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(labelX - 2, labelY - 2, labelWidth + 4, labelHeight + 4);
-
-      // Then draw the actual colored label
-      const labelColor = machineTypes[m.type]?.baseColor || '#45a049';
-      ctx.fillStyle = labelColor;
-      ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
-
-      // Add a border for better visibility
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(labelX, labelY, labelWidth, labelHeight);
-
-      // Draw text with shadow for better visibility
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 2;
-      ctx.shadowOffsetX = 1;
-      ctx.shadowOffsetY = 1;
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px Orbitron';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(labelText, labelX + labelWidth / 2, labelY + labelHeight / 2);
-      ctx.restore();
-
-      // Cooldown bar for catLair/reactor/incubator/fomoHit
-      if (m.type !== 'amplifier') {
-        const elapsed = Date.now() - (m.lastActivated || 0);
-        const cdProgress = Math.max(0, 1 - elapsed / MACHINE_COOLDOWN_MS);
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(m.x, m.y + machineSize - 8, machineSize, 6);
-
-        const gradient = ctx.createLinearGradient(
-          m.x,
-          m.y + machineSize - 8,
-          m.x + machineSize * cdProgress,
-          m.y + machineSize - 8
-        );
-        gradient.addColorStop(
-          0,
-          machineTypes[m.type]?.levelColors[m.level] || '#4CAF50'
-        );
-        gradient.addColorStop(1, '#fff');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(m.x, m.y + machineSize - 8, machineSize * cdProgress, 6);
-      }
-
-      // If amplifier is offline => show OFFLINE
-      if (m.type === 'amplifier' && m.isOffline) {
-        ctx.save();
-        const offText = 'OFFLINE';
-        const offWidth = 60;
-        const offHeight = 18;
-        const offX = m.x + machineSize / 2 - offWidth / 2;
-        const offY = m.y + machineSize + 2;
-        ctx.fillStyle = '#c62828';
-        ctx.fillRect(offX, offY, offWidth, offHeight);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(offText, offX + offWidth / 2, offY + offHeight / 2);
-        ctx.restore();
-      }
-
-      // If incubator is offline => show CONNECT WALLET
-      if (m.type === 'incubator' && m.isOffline) {
-        ctx.save();
-        const offText = 'CONNECT WALLET';
-        const offWidth = 120;
-        const offHeight = 18;
-        const offX = m.x + machineSize / 2 - offWidth / 2;
-        const offY = m.y + machineSize + 2;
-        ctx.fillStyle = '#FF5722';
-        ctx.fillRect(offX, offY, offWidth, offHeight);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(offText, offX + offWidth / 2, offY + offHeight / 2);
-        ctx.restore();
-      }
-      
-      // If FOMO HIT needs NFT minting => show MINT NFT
-      if (m.type === 'fomoHit' && m.lastActivated === 0) {
-        ctx.save();
-        const mintText = 'MINT NFT';
-        const mintWidth = 80;
-        const mintHeight = 18;
-        const mintX = m.x + machineSize / 2 - mintWidth / 2;
-        const mintY = m.y + machineSize + 2;
-        ctx.fillStyle = '#FF3D00';
-        ctx.fillRect(mintX, mintY, mintWidth, mintHeight);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(mintText, mintX + mintWidth / 2, mintY + mintHeight / 2);
-        ctx.restore();
-      }
-      
-      // If FOMO HIT has provisional mint in progress => show MINTING...
-      if (m.type === 'fomoHit' && m.provisionalMint === 1) {
-        ctx.save();
-        const mintingText = 'MINTING...';
-        const mintingWidth = 90;
-        const mintingHeight = 18;
-        const mintingX = m.x + machineSize / 2 - mintingWidth / 2;
-        const mintingY = m.y + machineSize + 2;
-        ctx.fillStyle = '#FF9800';
-        ctx.fillRect(mintingX, mintingY, mintingWidth, mintingHeight);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(mintingText, mintingX + mintingWidth / 2, mintingY + mintingHeight / 2);
-        ctx.restore();
-      }
-    });
-    
-    // Draw the machine move preview if in move mode and in the target room
-    if (showMovePreview && movingMachine && currentRoom === moveTargetRoom) {
-      // Draw a preview of the machine at cursor position
-      const { x, y } = moveCursorPosition;
-      const machineInfo = machineTypes[movingMachine.type];
-      
-      // Draw a semi-transparent preview
-      ctx.globalAlpha = 0.6;
-      
-      try {
-        // Try to get the appropriate image based on machine type
-        let img = null;
-        
-        if (movingMachine.type === 'catLair' && assetsRef.current.catsLairImage) {
-          img = assetsRef.current.catsLairImage;
-        } else if (movingMachine.type === 'reactor' && assetsRef.current.reactorImage) {
-          img = assetsRef.current.reactorImage;
-        } else if (movingMachine.type === 'amplifier' && assetsRef.current.amplifierImage) {
-          img = assetsRef.current.amplifierImage;
-        } else if (movingMachine.type === 'incubator' && assetsRef.current.incubatorImage) {
-          img = assetsRef.current.incubatorImage;
-        } else if (movingMachine.type === 'fomoHit' && assetsRef.current.fomoHitImage) {
-          img = assetsRef.current.fomoHitImage;
-        }
-
-        // Draw the machine preview
-        if (img) {
-          ctx.drawImage(img, x, y, machineSize, machineSize);
-        } else {
-          // Fallback drawing
-          ctx.fillStyle = machineInfo.baseColor || "#555";
-          ctx.fillRect(x, y, machineSize, machineSize);
-        }
-        
-        // Draw border around preview - make it more noticeable with animation
-        const time = Date.now() % 2000 / 2000; // Value between 0 and 1
-        const borderWidth = 3 + Math.sin(time * Math.PI * 2) * 2; // Width between 1 and 5
-        
-        // Use different styling for selected position
-        if (positionSelected) {
-          ctx.strokeStyle = "#00FF00"; // Green border for selected position
-          ctx.lineWidth = borderWidth;
-          ctx.strokeRect(x, y, machineSize, machineSize);
-          
-          // Add a "position selected" indicator
-          ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-          ctx.fillRect(x, y + machineSize + 5, machineSize, 25);
-          ctx.fillStyle = "#00FF00";
-          ctx.font = "bold 12px Orbitron";
-          ctx.textAlign = "center";
-          ctx.fillText("POSITION SELECTED", x + machineSize/2, y + machineSize + 20);
-        } else {
-          ctx.strokeStyle = "#FFD700";
-          ctx.lineWidth = borderWidth;
-          ctx.strokeRect(x, y, machineSize, machineSize);
-          
-          // Draw cost indicator
-          ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-          ctx.fillRect(x, y - 30, 100, 25);
-          ctx.fillStyle = "#FFD700";
-          ctx.font = "bold 14px Orbitron";
-          ctx.textAlign = "center";
-          ctx.fillText("Cost: 50 TCorvax", x + 50, y - 12);
-          
-          // Add "Click to place" text
-          ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-          ctx.fillRect(x, y + machineSize + 5, machineSize, 25);
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 12px Orbitron";
-          ctx.textAlign = "center";
-          ctx.fillText("CLICK TO PLACE", x + machineSize/2, y + machineSize + 20);
-        }
-        
-      } catch (error) {
-        console.error("Error drawing move preview:", error);
-      }
-      
-      ctx.globalAlpha = 1.0; // Reset opacity
-      
-      // Draw grid overlay when in move mode to help with placement
-      if ((inMoveMode || showMovePreview) && !positionSelected) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
-        ctx.lineWidth = 0.5;
-        
-        // Vertical grid lines
-        for (let ix = 0; ix < canvasRef.current.width; ix += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(ix, 0);
-          ctx.lineTo(ix, canvasRef.current.height);
-          ctx.stroke();
-        }
-        
-        // Horizontal grid lines
-        for (let iy = 0; iy < canvasRef.current.height; iy += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(0, iy);
-          ctx.lineTo(canvasRef.current.width, iy);
-          ctx.stroke();
-        }
-        
-        ctx.restore();
-      }
-    }
-    
-    // If we're in move mode but in a different room than the machine came from, 
-    // show an indicator that we're moving a machine
-    if (showMovePreview && movingMachine && currentRoom !== movingMachine.room && currentRoom === moveTargetRoom) {
-      ctx.save();
-      ctx.globalAlpha = 0.8;
-      ctx.fillStyle = "#FFD700";
-      ctx.font = "bold 16px Orbitron";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        `Moving ${machineTypes[movingMachine.type]?.name || 'Machine'} from Room ${movingMachine.room}`, 
-        canvasRef.current.width / 2, 
-        30
-      );
-      ctx.fillText(
-        "Click anywhere to place it in this room", 
-        canvasRef.current.width / 2, 
-        60
-      );
-      ctx.restore();
-    }
-  };
-  
-  // Function to draw pets
-  const drawPets = (ctx) => {
-    // Get only pets in the current room
-    const currentRoomPets = getPetsInCurrentRoom();
-    
-    if (!currentRoomPets || currentRoomPets.length === 0) return;
-
-    const petSize = gridSize * 1.5; // Make pets slightly smaller than machines
-    
-    currentRoomPets.forEach((pet) => {
-      // Skip the pet that's being moved
-      if (selectedPetToMove && pet.id === selectedPetToMove) return;
-      
-      try {
-        // Try to use the cat image
-        if (pet.type === 'cat' && assetsRef.current.catImage) {
-          ctx.drawImage(assetsRef.current.catImage, pet.x, pet.y, petSize, petSize);
-        } else {
-          // Fallback drawing if image isn't available
-          ctx.fillStyle = '#FFD700'; // Gold color for pets
-          ctx.fillRect(pet.x, pet.y, petSize, petSize);
-
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 14px Orbitron';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('Cat', pet.x + petSize / 2, pet.y + petSize / 2);
-          
-          // Draw a cute cat face emoji
-          ctx.font = 'bold 24px Arial';
-          ctx.fillText('🐱', pet.x + petSize / 2, pet.y + petSize / 4);
-        }
-        
-        // Draw little sparkle effect around pets
-        const time = Date.now() % 2000 / 2000; // Value between 0 and 1
-        const sparkleSize = 2 + Math.sin(time * Math.PI * 2) * 1; // Size between 1 and 3
-        
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.7)';
-        for (let i = 0; i < 8; i++) {
-          const angle = (i / 8) * Math.PI * 2 + time * Math.PI * 2;
-          const sparkleX = pet.x + petSize / 2 + Math.cos(angle) * (petSize / 2 + 5);
-          const sparkleY = pet.y + petSize / 2 + Math.sin(angle) * (petSize / 2 + 5);
-          ctx.beginPath();
-          ctx.arc(sparkleX, sparkleY, sparkleSize, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } catch (error) {
-        console.error(`Error drawing pet:`, error);
-        
-        // Last resort fallback
-        ctx.fillStyle = '#FFD700';
-        ctx.fillRect(pet.x, pet.y, petSize, petSize);
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Orbitron';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Cat', pet.x + petSize / 2, pet.y + petSize / 2);
-      }
-    });
-    
-    // Draw pet move preview if in pet move mode
-    if (showMovePreview && selectedPetToMove && inPetMoveMode) {
-      const petToMove = pets.find(p => p.id === selectedPetToMove);
-      if (petToMove) {
-        // Draw a semi-transparent preview
-        ctx.globalAlpha = 0.6;
-        
-        const { x, y } = moveCursorPosition;
-        
-        try {
-          if (assetsRef.current.catImage) {
-            ctx.drawImage(assetsRef.current.catImage, x, y, petSize, petSize);
-          } else {
-            // Fallback
-            ctx.fillStyle = '#FFD700';
-            ctx.fillRect(x, y, petSize, petSize);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 14px Orbitron';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Cat', x + petSize / 2, y + petSize / 2);
-          }
-          
-          // Draw a moving border
-          ctx.strokeStyle = "#00FF00";
-          ctx.lineWidth = 3 + Math.sin(Date.now() % 1000 / 1000 * Math.PI * 2) * 2;
-          ctx.strokeRect(x, y, petSize, petSize);
-        } catch (error) {
-          console.error("Error drawing pet move preview:", error);
-        }
-        
-        ctx.globalAlpha = 1.0; // Reset opacity
-      }
-    }
-  };
-
-  const drawParticlesAndNotifications = (ctx) => {
-    // Draw particles
-    particles.forEach((p) => {
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.life;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    });
-
-    // Draw notifications
-    notifications.forEach((n) => {
-      ctx.globalAlpha = n.life;
-      ctx.font = 'bold 16px Orbitron';
-      ctx.textAlign = 'center';
-      const textWidth = ctx.measureText(n.text).width;
-      const textHeight = 16;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(
-        n.x - textWidth / 2 - 8,
-        n.y - textHeight - 4,
-        textWidth + 16,
-        textHeight + 8
-      );
-      ctx.fillStyle = n.color;
-      ctx.fillText(n.text, n.x, n.y);
-      ctx.globalAlpha = 1;
-    });
-  };
-
   return (
     <div ref={gameContainerRef} className="game-container-wrapper" style={{ position: 'relative' }}>
       <canvas
@@ -1595,7 +950,7 @@ const GameCanvas = () => {
         }}
       />
 
-      {/* Move instructions overlay - FIXED: Added pointerEvents: 'none' to allow clicks to pass through */}
+      {/* Move instructions overlay */}
       {moveInstructionsVisible && showMovePreview && !positionSelected && (
         <div style={{
           position: 'absolute',
@@ -1610,7 +965,7 @@ const GameCanvas = () => {
           textAlign: 'center',
           boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)',
           animation: 'fadeInOut 5s forwards',
-          pointerEvents: 'none' // This is the key fix - allow clicks to pass through
+          pointerEvents: 'none' // Allow clicks to pass through
         }}>
           <h3 style={{ margin: '0 0 10px 0' }}>Click or tap where you want to place the {inPetMoveMode ? 'pet' : 'machine'}!</h3>
           <p style={{ margin: '0' }}>
@@ -1631,7 +986,7 @@ const GameCanvas = () => {
       {/* Room Navigation Component */}
       {isLoggedIn && <RoomNavigation />}
 
-      {/* Move confirmation dialog - ADAPTIVE POSITIONING AND SIZING BASED ON DEVICE */}
+      {/* Move confirmation dialog */}
       {moveConfirmationOpen && (
         <div style={{
           position: 'absolute',
@@ -1641,18 +996,18 @@ const GameCanvas = () => {
                 top: '100%',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                marginTop: '5px', // Reduced from 10px
-                zIndex: 990,  // Lower z-index
-                maxWidth: '300px', // Smaller max width for mobile
-                padding: '10px', // Reduced padding for mobile
-                fontSize: '14px' // Smaller font for mobile
+                marginTop: '5px',
+                zIndex: 990,
+                maxWidth: '300px',
+                padding: '10px',
+                fontSize: '14px'
               } 
             : {
                 // Desktop positioning: centered on screen
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                zIndex: 1000,  // Higher z-index to appear over canvas on desktop
+                zIndex: 1000,
                 maxWidth: '400px',
                 padding: '15px',
                 fontSize: '16px'
@@ -1661,13 +1016,13 @@ const GameCanvas = () => {
           backgroundColor: 'rgba(30, 30, 30, 0.95)',
           borderRadius: '10px',
           boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)',
-          width: isMobile ? '85%' : '90%', // Slightly narrower on mobile
+          width: isMobile ? '85%' : '90%',
           textAlign: 'center'
         }}>
           <h3 style={{ 
             margin: '0 0 8px 0', 
             color: '#FFD700',
-            fontSize: isMobile ? '16px' : '18px' // Smaller heading on mobile
+            fontSize: isMobile ? '16px' : '18px'
           }}>
             Confirm Machine Move
           </h3>
@@ -1699,8 +1054,8 @@ const GameCanvas = () => {
                 backgroundColor: '#333', 
                 flex: 1, 
                 marginRight: '10px',
-                padding: isMobile ? '8px 5px' : '12px 10px', // Smaller padding on mobile
-                fontSize: isMobile ? '13px' : '15px' // Smaller font on mobile
+                padding: isMobile ? '8px 5px' : '12px 10px',
+                fontSize: isMobile ? '13px' : '15px'
               }}
             >
               Cancel
@@ -1711,8 +1066,8 @@ const GameCanvas = () => {
                 backgroundColor: tcorvax >= 50 ? '#4CAF50' : '#999', 
                 flex: 1,
                 opacity: tcorvax >= 50 ? 1 : 0.7,
-                padding: isMobile ? '8px 5px' : '12px 10px', // Smaller padding on mobile
-                fontSize: isMobile ? '13px' : '15px' // Smaller font on mobile
+                padding: isMobile ? '8px 5px' : '12px 10px',
+                fontSize: isMobile ? '13px' : '15px'
               }}
               disabled={tcorvax < 50}
             >
@@ -1722,7 +1077,7 @@ const GameCanvas = () => {
         </div>
       )}
 
-      {/* Pet Move Confirmation - ADDED */}
+      {/* Pet Move Confirmation */}
       {inPetMoveMode && selectedPetToMove && positionSelected && (
         <div style={{
           position: 'absolute',
@@ -1808,19 +1163,8 @@ const GameCanvas = () => {
         />
       )}
 
-      {/* Evolving Creatures Minter Modal */}
-      {showCreatureMinter && (
-        <EvolvingCreatureMinter
-          onClose={() => setShowCreatureMinter(false)}
-        />
-      )}
-      
-      {/* My Creatures Panel */}
-      {showMyCreaturesPanel && (
-        <MyCreaturesPanel
-          onClose={() => setShowMyCreaturesPanel(false)}
-        />
-      )}
+      {/* Evolving Creatures Manager - handles all evolving creatures UI */}
+      <EvolvingCreaturesManager />
     </div>
   );
 };
