@@ -1,4 +1,4 @@
-// src/components/GameCanvas.jsx - Update with all fixes and pet integration
+// src/components/GameCanvas.jsx - Update with MyCreaturesPanel integration
 import { useContext, useEffect, useRef, useState } from 'react';
 import { GameContext } from '../context/GameContext';
 // Import from your RadixConnectContext
@@ -9,6 +9,7 @@ import RoomNavigation from './RoomNavigation';
 import PetBuyPrompt from './PetBuyPrompt';
 import PetInteractionMenu from './PetInteractionMenu';
 import EvolvingCreatureMinter from './EvolvingCreatureMinter';
+import MyCreaturesPanel from './MyCreaturesPanel';
 
 const GameCanvas = () => {
   const canvasRef = useRef(null);
@@ -110,6 +111,9 @@ const GameCanvas = () => {
   
   // Add state to track if position is selected
   const [positionSelected, setPositionSelected] = useState(false);
+  
+  // Add state for My Creatures Panel
+  const [showMyCreaturesPanel, setShowMyCreaturesPanel] = useState(false);
 
   // Load assets on mount
   useEffect(() => {
@@ -1808,6 +1812,13 @@ const GameCanvas = () => {
       {showCreatureMinter && (
         <EvolvingCreatureMinter
           onClose={() => setShowCreatureMinter(false)}
+        />
+      )}
+      
+      {/* My Creatures Panel */}
+      {showMyCreaturesPanel && (
+        <MyCreaturesPanel
+          onClose={() => setShowMyCreaturesPanel(false)}
         />
       )}
     </div>
