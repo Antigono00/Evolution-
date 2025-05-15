@@ -1,7 +1,6 @@
 // src/components/EvolvingCreaturesManager.jsx
-import React, { useContext } from 'react';
-import { GameContext } from '../context/GameContext';
-import { useRadixConnect } from '../context/RadixConnectContext';
+import React from 'react';
+import { useEvolvingCreatures } from '../context/EvolvingCreaturesContext';
 import EvolvingCreatureMinter from './EvolvingCreatureMinter';
 import MyCreaturesPanel from './MyCreaturesPanel';
 
@@ -10,19 +9,13 @@ import MyCreaturesPanel from './MyCreaturesPanel';
  * This centralizes all creature-related UI components and logic
  */
 const EvolvingCreaturesManager = () => {
-  // Game context
+  // Use the Evolving Creatures context
   const {
     showCreatureMinter,
     setShowCreatureMinter,
     showMyCreaturesPanel,
     setShowMyCreaturesPanel
-  } = useContext(GameContext);
-
-  // Radix Connect context
-  const {
-    connected,
-    accounts
-  } = useRadixConnect();
+  } = useEvolvingCreatures();
 
   return (
     <>
@@ -44,3 +37,4 @@ const EvolvingCreaturesManager = () => {
 };
 
 export default EvolvingCreaturesManager;
+
