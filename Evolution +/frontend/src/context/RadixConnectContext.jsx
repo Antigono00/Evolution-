@@ -20,6 +20,7 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
   const [connected, setConnected] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   // Initialize the Radix dApp Toolkit
   useEffect(() => {
@@ -59,6 +60,39 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
     };
   }, [dAppDefinitionAddress]);
 
+  // Function to save account address to backend
+  const saveAccountToBackend = async (accountAddress) => {
+    if (!accountAddress || isSavingAccount) return;
+    
+    try {
+      setIsSavingAccount(true);
+      console.log('Saving Radix account to backend:', accountAddress);
+      
+      const response = await fetch('/api/saveRadixAccount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountAddress: accountAddress
+        }),
+        credentials: 'same-origin'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save account');
+      }
+      
+      const data = await response.json();
+      console.log('Radix account saved successfully:', data);
+    } catch (error) {
+      console.error('Error saving Radix account:', error);
+    } finally {
+      setIsSavingAccount(false);
+    }
+  };
+
   // Handle connect/disconnect events + subscribe to wallet data
   useEffect(() => {
     if (!rdt) return;
@@ -84,8 +118,14 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
         setConnected(true);
         setAccounts(walletData.accounts);
 
-        if (walletData.accounts.length > 0 && !selectedAccount) {
-          setSelectedAccount(walletData.accounts[0]);
+        if (walletData.accounts.length > 0) {
+          const firstAccount = walletData.accounts[0];
+          setSelectedAccount(firstAccount);
+          
+          // Save the account address to backend
+          if (firstAccount.address) {
+            saveAccountToBackend(firstAccount.address);
+          }
         }
       }
     });
@@ -95,7 +135,13 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
     if (initialWalletData && initialWalletData.accounts && initialWalletData.accounts.length > 0) {
       setConnected(true);
       setAccounts(initialWalletData.accounts);
-      setSelectedAccount(initialWalletData.accounts[0]);
+      const firstAccount = initialWalletData.accounts[0];
+      setSelectedAccount(firstAccount);
+      
+      // Save the initial account address to backend
+      if (firstAccount.address) {
+        saveAccountToBackend(firstAccount.address);
+      }
     }
 
     // Cleanup
@@ -104,7 +150,14 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
       document.removeEventListener('radix-connect-button:onDisconnect', handleDisconnect);
       subscription.unsubscribe();
     };
-  }, [rdt, selectedAccount]);
+  }, [rdt]);
+
+  // Effect to trigger account save when selected account changes
+  useEffect(() => {
+    if (selectedAccount && selectedAccount.address) {
+      saveAccountToBackend(selectedAccount.address);
+    }
+  }, [selectedAccount]);
 
   // Function to explicitly request account sharing again
   const updateAccountSharing = async () => {
@@ -128,7 +181,8 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
     accounts,
     selectedAccount,
     setSelectedAccount,
-    updateAccountSharing
+    updateAccountSharing,
+    saveAccountToBackend
   };
 
   return (
