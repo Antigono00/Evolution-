@@ -1,4 +1,4 @@
-// src/context/GameContext.jsx
+// src/context/GameContext.jsx - Updated
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
@@ -122,27 +122,6 @@ export const GameProvider = ({ children }) => {
 
   // Transaction service
   const [transactionService, setTransactionService] = useState(null);
-
-  // Creature NFTs states
-  const [creatureNfts, setCreatureNfts] = useState([]);
-  const [toolNfts, setToolNfts] = useState([]);
-  const [spellNfts, setSpellNfts] = useState([]);
-
-  // Creature UI states
-  const [showCreatureMinter, setShowCreatureMinter] = useState(false);
-  const [showMyCreaturesPanel, setShowMyCreaturesPanel] = useState(false);
-  const [selectedCreature, setSelectedCreature] = useState(null);
-  const [creatureStatsData, setCreatureStatsData] = useState({
-    allocatedPoints: {
-      energy: 0,
-      strength: 0,
-      magic: 0,
-      stamina: 0, 
-      speed: 0
-    },
-    totalAllocated: 0,
-    maxAllocatable: 2
-  });
 
   // Player
   const [player, setPlayer] = useState({
@@ -361,24 +340,6 @@ export const GameProvider = ({ children }) => {
     }
   }, [loadGameFromServer]);
 
-  // Load creature NFTs and related items
-  const loadCreatureNfts = useCallback(async () => {
-    try {
-      const resp = await axios.get('/api/getCreatureNfts');
-      if (resp.data.creatures) {
-        setCreatureNfts(resp.data.creatures);
-      }
-      if (resp.data.tools) {
-        setToolNfts(resp.data.tools);
-      }
-      if (resp.data.spells) {
-        setSpellNfts(resp.data.spells);
-      }
-    } catch (error) {
-      console.error('Error loading creature NFTs:', error);
-    }
-  }, []);
-
   // Get sCVX balance using the SDK Gateway
   const getSCvxBalanceViaSDK = useCallback(async (userAccount) => {
     if (!userAccount) return 0;
@@ -407,264 +368,6 @@ export const GameProvider = ({ children }) => {
       console.error('Error dismissing room unlock message:', error);
     }
   }, []);
-
-  // Function to fetch user's creatures from the blockchain
-  const fetchUserCreatures = useCallback(async () => {
-    if (!connected || !accounts || accounts.length === 0) {
-      return [];
-    }
-    
-    try {
-      // Try to get from our backend
-      const response = await axios.get('/api/getUserCreatures');
-      if (response.data && response.data.creatures) {
-        setCreatureNfts(response.data.creatures);
-        return response.data.creatures;
-      }
-      
-      // If backend doesn't provide this, we'll use existing creatures
-      return creatureNfts;
-    } catch (error) {
-      console.error('Error fetching user creatures:', error);
-      return [];
-    }
-  }, [connected, accounts, creatureNfts]);
-
-  // Function to handle stat allocation during upgrade
-  const handleStatAllocation = useCallback((stat, value) => {
-    setCreatureStatsData(prev => {
-      // Calculate new total after this change
-      const currentValue = prev.allocatedPoints[stat];
-      const delta = value - currentValue;
-      const newTotal = prev.totalAllocated + delta;
-      
-      // Enforce max allocatable points
-      if (newTotal > prev.maxAllocatable) {
-        return prev; // Don't allow exceeding max
-      }
-      
-      // Update the stat
-      return {
-        ...prev,
-        allocatedPoints: {
-          ...prev.allocatedPoints,
-          [stat]: value
-        },
-        totalAllocated: newTotal
-      };
-    });
-  }, []);
-
-  // Reset stat allocation
-  const resetStatAllocation = useCallback(() => {
-    setCreatureStatsData({
-      allocatedPoints: {
-        energy: 0,
-        strength: 0,
-        magic: 0,
-        stamina: 0,
-        speed: 0
-      },
-      totalAllocated: 0,
-      maxAllocatable: 2
-    });
-  }, []);
-
-  // Handle NFT minting with Radix
-  const initiateMintTransaction = useCallback(async (manifest, machineId) => {
-    if (!connected || !accounts || accounts.length === 0) {
-      addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
-      return null;
-    }
-
-    try {
-      console.log("Initiating mint transaction with manifest:", manifest);
-      
-      // Make sure the RadixDappToolkit is ready
-      if (!rdt) {
-        console.error("Radix Dapp Toolkit not initialized");
-        return null;
-      }
-      
-      // Send the transaction to the wallet
-      const result = await rdt.walletApi.sendTransaction({
-        transactionManifest: manifest,
-        version: 1,
-      });
-      
-      if (result.isErr()) {
-        console.error("Transaction error:", result.error);
-        addNotification("Transaction failed", 400, 300, "#FF3D00");
-        return null;
-      }
-      
-      const intentHash = result.value.transactionIntentHash;
-      console.log("Transaction sent with intent hash:", intentHash);
-      
-      // Add tracking notification
-      addNotification("NFT minting transaction sent!", 400, 300, "#FF3D00");
-      
-      return intentHash;
-    } catch (error) {
-      console.error("Error in mint transaction:", error);
-      addNotification("Transaction error: " + error.message, 400, 300, "#FF3D00");
-      return null;
-    }
-  }, [connected, accounts, rdt, addNotification]);
-
-  // Poll transaction status
-  const pollTransactionStatus = useCallback(async (intentHash, machineId) => {
-    if (!intentHash) return;
-    
-    try {
-      const response = await fetch('/api/checkMintStatus', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          intentHash,
-          machineId
-        }),
-        credentials: 'same-origin'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log("Transaction status:", data);
-      
-      const transactionStatus = data.transactionStatus;
-      
-      if (transactionStatus.status === "CommittedSuccess") {
-        addNotification("NFT minted successfully!", 400, 300, "#4CAF50");
-        await loadGameFromServer(); // Refresh the game state
-        return true;
-      } else if (transactionStatus.status === "Failed" || transactionStatus.status === "Rejected") {
-        addNotification("Mint failed: " + (transactionStatus.error_message || "Unknown error"), 400, 300, "#FF3D00");
-        return true;
-      }
-      
-      // Still pending
-      return false;
-    } catch (error) {
-      console.error("Error checking transaction status:", error);
-      return false;
-    }
-  }, [addNotification, loadGameFromServer]);
-
-  // Function to upgrade creature stats
-  const upgradeCreatureStats = useCallback(async (creature, statPoints) => {
-    if (!connected || !accounts || accounts.length === 0) {
-      addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
-      return null;
-    }
-    
-    try {
-      // Create the transaction manifest for upgrading stats
-      const response = await fetch('/api/getUpgradeStatsManifest', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountAddress: accounts[0].address,
-          creatureId: creature.id,
-          energy: statPoints.energy || 0,
-          strength: statPoints.strength || 0,
-          magic: statPoints.magic || 0,
-          stamina: statPoints.stamina || 0,
-          speed: statPoints.speed || 0
-        }),
-        credentials: 'same-origin'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.manifest) {
-        throw new Error("Server didn't return upgrade manifest");
-      }
-      
-      // Send the transaction to the wallet
-      const hash = await initiateMintTransaction(data.manifest, 'creatureUpgrade');
-      
-      if (hash) {
-        // Start polling for status
-        const isComplete = await pollTransactionStatus(hash, 'creatureUpgrade');
-        if (isComplete) {
-          addNotification("Stats upgraded successfully!", 400, 300, "#4CAF50");
-          await loadCreatureNfts(); // Refresh the NFT data
-          return true;
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.error("Error upgrading stats:", error);
-      addNotification("Upgrade error: " + error.message, 400, 300, "#FF3D00");
-      return false;
-    }
-  }, [connected, accounts, addNotification, initiateMintTransaction, pollTransactionStatus, loadCreatureNfts]);
-
-  // Function to evolve a creature to next form
-  const evolveCreature = useCallback(async (creature) => {
-    if (!connected || !accounts || accounts.length === 0) {
-      addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
-      return null;
-    }
-    
-    try {
-      // Create the transaction manifest for evolution
-      const response = await fetch('/api/getEvolveManifest', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountAddress: accounts[0].address,
-          creatureId: creature.id
-        }),
-        credentials: 'same-origin'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data.manifest) {
-        throw new Error("Server didn't return evolution manifest");
-      }
-      
-      // Send the transaction to the wallet
-      const hash = await initiateMintTransaction(data.manifest, 'creatureEvolve');
-      
-      if (hash) {
-        // Start polling for status
-        const isComplete = await pollTransactionStatus(hash, 'creatureEvolve');
-        if (isComplete) {
-          addNotification("Creature evolved successfully!", 400, 300, "#4CAF50");
-          await loadCreatureNfts(); // Refresh the NFT data
-          return true;
-        }
-      }
-      
-      return false;
-    } catch (error) {
-      console.error("Error evolving creature:", error);
-      addNotification("Evolution error: " + error.message, 400, 300, "#FF3D00");
-      return false;
-    }
-  }, [connected, accounts, addNotification, initiateMintTransaction, pollTransactionStatus, loadCreatureNfts]);
 
   // Function to handle activation of a cat's lair and show pet prompt
   const handleCatLairActivation = useCallback((machine) => {
@@ -843,13 +546,6 @@ export const GameProvider = ({ children }) => {
       return false;
     }
   };
-
-  // Load creature NFTs when logged in
-  useEffect(() => {
-    if (isLoggedIn) {
-      loadCreatureNfts();
-    }
-  }, [isLoggedIn, loadCreatureNfts]);
 
   // On mount => check Telegram session
   useEffect(() => {
@@ -1121,28 +817,10 @@ export const GameProvider = ({ children }) => {
       const responseData = await response.json();
       const resp = { data: responseData };
       
-      // Handle NFT minting for FOMO HIT
+      // Handle NFT minting for FOMO HIT (passed to EvolvingCreaturesContext)
       if (resp.data.requiresMint && resp.data.manifest) {
-        const intentHash = await initiateMintTransaction(resp.data.manifest, machine.id);
-        
-        if (intentHash) {
-          // Start polling for status
-          let statusCheckCount = 0;
-          const maxStatusChecks = 30; // Limit how many times we check
-          
-          const checkStatus = async () => {
-            statusCheckCount++;
-            const isComplete = await pollTransactionStatus(intentHash, machine.id);
-            
-            if (!isComplete && statusCheckCount < maxStatusChecks) {
-              // Continue polling every 3 seconds
-              setTimeout(checkStatus, 3000);
-            }
-          };
-          
-          // Start the polling
-          setTimeout(checkStatus, 3000);
-        }
+        addNotification("NFT minting is now handled in EvolvingCreaturesContext", 
+                       machine.x + gridSize, machine.y - 20, "#4CAF50");
       }
 
       if (resp.data.message) {
@@ -1374,10 +1052,6 @@ export const GameProvider = ({ children }) => {
         calculateMachineCost,
         formatResource,
 
-        // NFT minting
-        initiateMintTransaction,
-        pollTransactionStatus,
-
         // Room navigation
         currentRoom,
         setCurrentRoom,
@@ -1420,25 +1094,8 @@ export const GameProvider = ({ children }) => {
         // Expose sCVX methods (mainly for compatibility)
         getSCvxBalance: getSCvxBalanceViaSDK,
         
-        // Creature NFTs
-        creatureNfts,
-        toolNfts,
-        spellNfts,
-        loadCreatureNfts,
-
-        // Creature UI and functions
-        showCreatureMinter,
-        setShowCreatureMinter,
-        showMyCreaturesPanel,
-        setShowMyCreaturesPanel,
-        selectedCreature,
-        setSelectedCreature,
-        fetchUserCreatures,
-        creatureStatsData,
-        handleStatAllocation,
-        resetStatAllocation,
-        upgradeCreatureStats,
-        evolveCreature
+        // FOMO HIT transaction methods
+        initiateCVXTransaction,
       }}
     >
       {children}
