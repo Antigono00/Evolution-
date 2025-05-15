@@ -54,7 +54,9 @@ const MyCreaturesPanel = ({ onClose }) => {
     const loadCreatures = async () => {
       setIsLoading(true);
       try {
+        console.log("About to call fetchUserCreatures");
         const userCreatures = await fetchUserCreatures();
+        console.log("Received creatures:", userCreatures);
         setCreatures(userCreatures || []);
       } catch (error) {
         console.error('Error loading creatures:', error);
@@ -64,9 +66,33 @@ const MyCreaturesPanel = ({ onClose }) => {
     };
     
     if (connectionStatus === 'ready') {
+      console.log("Connection ready, loading creatures");
       loadCreatures();
+    } else {
+      console.log("Connection not ready yet, status:", connectionStatus);
     }
   }, [fetchUserCreatures, connectionStatus]);
+
+  // RIGHT AFTER THIS useEffect, add the new direct API test useEffect:
+  useEffect(() => {
+    // Direct API test for debugging
+    async function testDirectAPI() {
+      if (!connected || !accounts || accounts.length === 0) return;
+      
+      try {
+        console.log("Testing direct API call with account:", accounts[0].address);
+        const response = await fetch(`/api/getUserCreatures?accountAddress=${accounts[0].address}`);
+        const data = await response.json();
+        console.log("Direct API response:", data);
+      } catch (err) {
+        console.error("Direct API test failed:", err);
+      }
+    }
+    
+    if (connectionStatus === 'ready') {
+      testDirectAPI();
+    }
+  }, [connected, accounts, connectionStatus]);
 
   // Handle creature selection
   const handleSelectCreature = (creature) => {
