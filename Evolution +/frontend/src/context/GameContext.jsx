@@ -12,6 +12,9 @@ import { useRadixConnect } from './RadixConnectContext';
 import PetService from '../utils/PetService';
 import TransactionService from '../utils/TransactionService';
 
+// Create the context first (before any references to it)
+export const GameContext = createContext();
+
 // Updated machineTypes with fomoHit cost change and incubator maxLevel
 const machineTypes = {
   catLair: {
@@ -52,15 +55,14 @@ const machineTypes = {
     production: { tcorvax: 0 },
     cooldown: 3600 * 1000,
     baseColor: "#FF5722",
-    levelColors: { 1: "#FF5722", 2: "#E64A19" }, // Added level 2 color
+    levelColors: { 1: "#FF5722", 2: "#E64A19" },
     particleColor: "#FFCCBC",
     icon: "🥚",
-    maxLevel: 2 // Added maxLevel property
+    maxLevel: 2
   },
-  // Update FomoHit cost
   fomoHit: {
     name: "The FOMO HIT",
-    baseCost: { tcorvax: 640, catNips: 640, energy: 640 }, // Updated cost
+    baseCost: { tcorvax: 640, catNips: 640, energy: 640 },
     production: { tcorvax: 5 },
     cooldown: 3600 * 1000,
     baseColor: "#FF3D00",
@@ -77,13 +79,10 @@ const MACHINE_COOLDOWN_MS = 3600 * 1000;
 const gridSize = 64;
 const INTERACTION_RANGE = gridSize * 1.5;
 
-// Create the context
-export const GameContext = createContext();
-
 // Correctly initialize the Gateway client for Mainnet with gatewayApiUrl
 const gatewayApi = GatewayApiClient.initialize({
   networkId: RadixNetwork.Mainnet,
-  applicationName: 'Corvax Lab', // any name you like
+  applicationName: 'Corvax Lab',
   gatewayApiUrl: 'https://mainnet-gateway.radixdlt.com'
 });
 
@@ -96,7 +95,7 @@ export const GameProvider = ({ children }) => {
   const [tcorvax, setTcorvax] = useState(300.0);
   const [catNips, setCatNips] = useState(300.0);
   const [energy, setEnergy] = useState(300.0);
-  const [eggs, setEggs] = useState(0.0); // New eggs resource
+  const [eggs, setEggs] = useState(0.0);
 
   // Machines
   const [machines, setMachines] = useState([]);
@@ -108,7 +107,7 @@ export const GameProvider = ({ children }) => {
     fomoHit: 0,
   });
   
-  // Machine movement state - IMPORTANT for fixing the issue
+  // Machine movement state
   const [selectedMachineToMove, setSelectedMachineToMove] = useState(null);
   const [inMoveMode, setInMoveMode] = useState(false);
 
@@ -124,13 +123,26 @@ export const GameProvider = ({ children }) => {
   // Transaction service
   const [transactionService, setTransactionService] = useState(null);
 
-  // Creature NFTs states - ADDED
+  // Creature NFTs states
   const [creatureNfts, setCreatureNfts] = useState([]);
   const [toolNfts, setToolNfts] = useState([]);
   const [spellNfts, setSpellNfts] = useState([]);
 
-  // Add this to the state declarations in GameProvider
+  // Creature UI states
   const [showCreatureMinter, setShowCreatureMinter] = useState(false);
+  const [showMyCreaturesPanel, setShowMyCreaturesPanel] = useState(false);
+  const [selectedCreature, setSelectedCreature] = useState(null);
+  const [creatureStatsData, setCreatureStatsData] = useState({
+    allocatedPoints: {
+      energy: 0,
+      strength: 0,
+      magic: 0,
+      stamina: 0, 
+      speed: 0
+    },
+    totalAllocated: 0,
+    maxAllocatable: 2
+  });
 
   // Player
   const [player, setPlayer] = useState({
@@ -159,7 +171,7 @@ export const GameProvider = ({ children }) => {
   const [currentRoom, setCurrentRoom] = useState(1);
   const [roomsUnlocked, setRoomsUnlocked] = useState(1);
   const [showRoomUnlockMessage, setShowRoomUnlockMessage] = useState(false);
-  const [seenRoomUnlock, setSeenRoomUnlock] = useState(0); // Added seen state for persistence
+  const [seenRoomUnlock, setSeenRoomUnlock] = useState(0);
 
   // Transaction tracking
   const [pendingTransactions, setPendingTransactions] = useState({});
@@ -174,25 +186,96 @@ export const GameProvider = ({ children }) => {
     }
   }, [rdt]);
 
-  /**
-   * Direct SDK query using the SDK Gateway
-   */
-  const getSCvxBalanceViaSDK = async (userAccount) => {
-    if (!userAccount) return 0;
-    console.log('getSCvxBalanceViaSDK - checking sCVX for =>', userAccount.address);
-
-    try {
-      // sCVX resource address
-      const sCVXresource = 'resource_rdx1t5q4aa74uxcgzehk0u3hjy6kng9rqyr4uvktnud8ehdqaaez50n693';
-      
-      // Defer to backend handling instead
-      console.log('Deferring sCVX lookup to backend with address:', userAccount.address);
-      return 0;
-    } catch (err) {
-      console.error('Error in getSCvxBalanceViaSDK =>', err);
-      return 0;
+  // IMPORTANT - Define these utility functions first before they're used elsewhere
+  // UI => notifications, particles
+  const addNotification = useCallback((text, x, y, color) => {
+    setNotifications(prev => [
+      ...prev,
+      {
+        id: Date.now() + Math.random(),
+        text,
+        x,
+        y,
+        color,
+        life: 3.0
+      }
+    ]);
+  }, []);
+  
+  const addParticles = useCallback((x, y, color, count = 20) => {
+    const arr = [];
+    for (let i = 0; i < count; i++) {
+      arr.push({
+        id: Date.now() + i,
+        x,
+        y,
+        color,
+        size: Math.random() * 3 + 2,
+        speedX: (Math.random() - 0.5) * 3,
+        speedY: (Math.random() - 0.5) * 3,
+        life: 1.0
+      });
     }
-  };
+    setParticles(prev => [...prev, ...arr]);
+  }, []);
+
+  // Utility methods
+  const formatResource = useCallback((val) => {
+    if (!val && val !== 0) return "0.0";
+    return val.toFixed(1);
+  }, []);
+  
+  const canAfford = useCallback((cost) => {
+    if (!cost) return true;
+    return (
+      (!cost.tcorvax || tcorvax >= cost.tcorvax) &&
+      (!cost.catNips || catNips >= cost.catNips) &&
+      (!cost.energy || energy >= cost.energy) &&
+      (!cost.eggs || eggs >= cost.eggs)
+    );
+  }, [tcorvax, catNips, energy, eggs]);
+  
+  const calculateMachineCost = useCallback((type) => {
+    const base = machineTypes[type]?.baseCost || {};
+    const builtCount = machineCount[type] || 0;
+    
+    if ((type === "catLair" || type === "reactor") && builtCount === 1) {
+      const multiplied = {};
+      for (const k in base) {
+        multiplied[k] = base[k] * 4;
+      }
+      return multiplied;
+    }
+    
+    // Special case for third reactor
+    if (type === "reactor" && builtCount === 2) {
+      return { tcorvax: 640, catNips: 640 };
+    }
+    
+    return { ...base };
+  }, [machineCount]);
+  
+  const canBuildMachine = useCallback((type) => {
+    const builtCount = machineCount[type] || 0;
+    
+    if (type === "catLair") {
+      if (builtCount >= 2) return false;
+    } else if (type === "reactor") {
+      if (builtCount >= 2) {
+        // Allow a third reactor if player has incubator and fomoHit
+        if (machineCount['incubator'] && machineCount['fomoHit']) {
+          if (builtCount >= 3) return false;
+        } else {
+          return false;
+        }
+      }
+    } else if (type === "amplifier" || type === "incubator" || type === "fomoHit") {
+      if (builtCount >= 1) return false;
+    }
+    
+    const cost = calculateMachineCost(type);
+    return canAfford(cost);
+  }, [machineCount, calculateMachineCost, canAfford]);
 
   // Function to get machines in current room only
   const getMachinesInCurrentRoom = useCallback(() => {
@@ -204,41 +287,33 @@ export const GameProvider = ({ children }) => {
     return pets.filter(pet => (pet.room || 1) === currentRoom);
   }, [pets, currentRoom]);
 
-  // Function to close room unlock message and persist the dismissal
-  const dismissRoomUnlock = useCallback(async () => {
-    try {
-      await axios.post('/api/dismissRoomUnlock');
-      setSeenRoomUnlock(1);
-      setShowRoomUnlockMessage(false);
-    } catch (error) {
-      console.error('Error dismissing room unlock message:', error);
-    }
-  }, []);
+  // Function to check if a pet is being hovered over
+  const getPetAtPosition = useCallback((x, y) => {
+    // Only consider pets in the current room
+    const currentRoomPets = pets.filter(pet => (pet.room || 1) === currentRoom);
+    const petSize = gridSize * 1.5;
+    
+    return currentRoomPets.find((p) => {
+      return (
+        x >= p.x &&
+        x < p.x + petSize &&
+        y >= p.y &&
+        y < p.y + petSize
+      );
+    });
+  }, [pets, currentRoom, gridSize]);
 
-  // Telegram login + load game from server
-  const checkLoginStatus = useCallback(async () => {
-    try {
-      const resp = await axios.get('/api/whoami');
-      if (resp.data.loggedIn) {
-        setIsLoggedIn(true);
-        setUserName(resp.data.firstName || 'Player');
-        await loadGameFromServer();
-      }
-    } catch (error) {
-      console.error('Error checking login status:', error);
-    }
-  }, []);
-
+  // Load game state from server
   const loadGameFromServer = useCallback(async () => {
     try {
       const resp = await axios.get('/api/getGameState');
       setTcorvax(parseFloat(resp.data.tcorvax));
       setCatNips(parseFloat(resp.data.catNips));
       setEnergy(parseFloat(resp.data.energy));
-      setEggs(parseFloat(resp.data.eggs || 0)); // Add eggs handling
-      setSeenRoomUnlock(resp.data.seenRoomUnlock || 0); // Add seen flag handling
+      setEggs(parseFloat(resp.data.eggs || 0));
+      setSeenRoomUnlock(resp.data.seenRoomUnlock || 0);
       
-      // Load pets (new)
+      // Load pets
       if (resp.data.pets) {
         setPets(resp.data.pets);
       }
@@ -271,9 +346,22 @@ export const GameProvider = ({ children }) => {
     } catch (error) {
       console.error('Error loading game state:', error);
     }
-  }, [roomsUnlocked]);
+  }, [roomsUnlocked, addNotification]);
 
-  // Load creature NFTs and related items - ADDED
+  const checkLoginStatus = useCallback(async () => {
+    try {
+      const resp = await axios.get('/api/whoami');
+      if (resp.data.loggedIn) {
+        setIsLoggedIn(true);
+        setUserName(resp.data.firstName || 'Player');
+        await loadGameFromServer();
+      }
+    } catch (error) {
+      console.error('Error checking login status:', error);
+    }
+  }, [loadGameFromServer]);
+
+  // Load creature NFTs and related items
   const loadCreatureNfts = useCallback(async () => {
     try {
       const resp = await axios.get('/api/getCreatureNfts');
@@ -291,169 +379,99 @@ export const GameProvider = ({ children }) => {
     }
   }, []);
 
-  // Load creature NFTs when logged in - ADDED
-  useEffect(() => {
-    if (isLoggedIn) {
-      loadCreatureNfts();
-    }
-  }, [isLoggedIn, loadCreatureNfts]);
+  // Get sCVX balance using the SDK Gateway
+  const getSCvxBalanceViaSDK = useCallback(async (userAccount) => {
+    if (!userAccount) return 0;
+    console.log('getSCvxBalanceViaSDK - checking sCVX for =>', userAccount.address);
 
-  // Utility methods
-  const formatResource = (val) => {
-    if (!val && val !== 0) return "0.0";
-    return val.toFixed(1);
-  };
-  
-  const canAfford = (cost) => {
-    if (!cost) return true;
-    return (
-      (!cost.tcorvax || tcorvax >= cost.tcorvax) &&
-      (!cost.catNips || catNips >= cost.catNips) &&
-      (!cost.energy || energy >= cost.energy) &&
-      (!cost.eggs || eggs >= cost.eggs)
-    );
-  };
-  
-  const calculateMachineCost = useCallback((type) => {
-    const base = machineTypes[type]?.baseCost || {};
-    const builtCount = machineCount[type] || 0;
-    
-    if ((type === "catLair" || type === "reactor") && builtCount === 1) {
-      const multiplied = {};
-      for (const k in base) {
-        multiplied[k] = base[k] * 4;
-      }
-      return multiplied;
-    }
-    
-    // Special case for third reactor
-    if (type === "reactor" && builtCount === 2) {
-      return { tcorvax: 640, catNips: 640 }; // Special cost for third reactor
-    }
-    
-    return { ...base };
-  }, [machineCount]);
-  
-  const canBuildMachine = useCallback((type) => {
-    const builtCount = machineCount[type] || 0;
-    
-    if (type === "catLair") {
-      if (builtCount >= 2) return false;
-    } else if (type === "reactor") {
-      if (builtCount >= 2) {
-        // Allow a third reactor if player has incubator and fomoHit
-        if (machineCount['incubator'] && machineCount['fomoHit']) {
-          if (builtCount >= 3) return false;
-        } else {
-          return false;
-        }
-      }
-    } else if (type === "amplifier" || type === "incubator" || type === "fomoHit") {
-      if (builtCount >= 1) return false;
-    }
-    
-    const cost = calculateMachineCost(type);
-    return canAfford(cost);
-  }, [machineCount, calculateMachineCost, canAfford]);
-
-  // UI => notifications, particles
-  const addNotification = (text, x, y, color) => {
-    setNotifications(prev => [
-      ...prev,
-      {
-        id: Date.now() + Math.random(),
-        text,
-        x,
-        y,
-        color,
-        life: 3.0
-      }
-    ]);
-  };
-  
-  const addParticles = (x, y, color, count = 20) => {
-    const arr = [];
-    for (let i = 0; i < count; i++) {
-      arr.push({
-        id: Date.now() + i,
-        x,
-        y,
-        color,
-        size: Math.random() * 3 + 2,
-        speedX: (Math.random() - 0.5) * 3,
-        speedY: (Math.random() - 0.5) * 3,
-        life: 1.0
-      });
-    }
-    setParticles(prev => [...prev, ...arr]);
-  };
-
-  // Build / Upgrade / Activate
-  const buildMachine = async (type, x, y) => {
     try {
-      const resp = await axios.post('/api/buildMachine', { 
-        machineType: type, 
-        x, 
-        y,
-        room: currentRoom  // Include current room
-      });
+      // sCVX resource address
+      const sCVXresource = 'resource_rdx1t5q4aa74uxcgzehk0u3hjy6kng9rqyr4uvktnud8ehdqaaez50n693';
       
-      setTcorvax(parseFloat(resp.data.newResources.tcorvax));
-      setCatNips(parseFloat(resp.data.newResources.catNips));
-      setEnergy(parseFloat(resp.data.newResources.energy));
-      
-      // Check if we just unlocked a new room
-      const newRoomsUnlocked = resp.data.roomsUnlocked || 1;
-      if (newRoomsUnlocked > roomsUnlocked) {
-        setRoomsUnlocked(newRoomsUnlocked);
-        setShowRoomUnlockMessage(true);
-        addNotification("New room unlocked! Click the arrow to navigate.", 400, 300, "#4CAF50");
-      }
-      
-      await loadGameFromServer();
-      addNotification(`Built ${type}!`, x + gridSize / 2, y - 20, "#4CAF50");
-      addParticles(x + gridSize, y + gridSize, machineTypes[type].particleColor || "#fff");
-    } catch (error) {
-      console.error('Error building machine:', error);
-      addNotification(
-        error.response?.data?.error || "Build error!",
-        x + gridSize / 2,
-        y - 20,
-        "#ff4444"
-      );
+      // Defer to backend handling instead
+      console.log('Deferring sCVX lookup to backend with address:', userAccount.address);
+      return 0;
+    } catch (err) {
+      console.error('Error in getSCvxBalanceViaSDK =>', err);
+      return 0;
     }
-  };
+  }, []);
 
-  const upgradeMachine = async (machineId) => {
+  // Function to close room unlock message and persist the dismissal
+  const dismissRoomUnlock = useCallback(async () => {
     try {
-      const resp = await axios.post('/api/upgradeMachine', { machineId });
-      setTcorvax(parseFloat(resp.data.newResources.tcorvax));
-      setCatNips(parseFloat(resp.data.newResources.catNips));
-      setEnergy(parseFloat(resp.data.newResources.energy));
-
-      const machine = machines.find(m => m.id === machineId);
-      if (machine) {
-        addParticles(machine.x + gridSize, machine.y + gridSize, "#FFD700", 30);
-        addNotification(
-          `Level Up => ${resp.data.newLevel}`,
-          machine.x + gridSize,
-          machine.y - 20,
-          "#FFD700"
-        );
-      }
-      await loadGameFromServer();
+      await axios.post('/api/dismissRoomUnlock');
+      setSeenRoomUnlock(1);
+      setShowRoomUnlockMessage(false);
     } catch (error) {
-      console.error('Error upgrading machine:', error);
-      addNotification(
-        error.response?.data?.error || "Upgrade error!",
-        0, 0,
-        "#ff4444"
-      );
+      console.error('Error dismissing room unlock message:', error);
     }
-  };
+  }, []);
+
+  // Function to fetch user's creatures from the blockchain
+  const fetchUserCreatures = useCallback(async () => {
+    if (!connected || !accounts || accounts.length === 0) {
+      return [];
+    }
+    
+    try {
+      // Try to get from our backend
+      const response = await axios.get('/api/getUserCreatures');
+      if (response.data && response.data.creatures) {
+        setCreatureNfts(response.data.creatures);
+        return response.data.creatures;
+      }
+      
+      // If backend doesn't provide this, we'll use existing creatures
+      return creatureNfts;
+    } catch (error) {
+      console.error('Error fetching user creatures:', error);
+      return [];
+    }
+  }, [connected, accounts, creatureNfts]);
+
+  // Function to handle stat allocation during upgrade
+  const handleStatAllocation = useCallback((stat, value) => {
+    setCreatureStatsData(prev => {
+      // Calculate new total after this change
+      const currentValue = prev.allocatedPoints[stat];
+      const delta = value - currentValue;
+      const newTotal = prev.totalAllocated + delta;
+      
+      // Enforce max allocatable points
+      if (newTotal > prev.maxAllocatable) {
+        return prev; // Don't allow exceeding max
+      }
+      
+      // Update the stat
+      return {
+        ...prev,
+        allocatedPoints: {
+          ...prev.allocatedPoints,
+          [stat]: value
+        },
+        totalAllocated: newTotal
+      };
+    });
+  }, []);
+
+  // Reset stat allocation
+  const resetStatAllocation = useCallback(() => {
+    setCreatureStatsData({
+      allocatedPoints: {
+        energy: 0,
+        strength: 0,
+        magic: 0,
+        stamina: 0,
+        speed: 0
+      },
+      totalAllocated: 0,
+      maxAllocatable: 2
+    });
+  }, []);
 
   // Handle NFT minting with Radix
-  const initiateMintTransaction = async (manifest, machineId) => {
+  const initiateMintTransaction = useCallback(async (manifest, machineId) => {
     if (!connected || !accounts || accounts.length === 0) {
       addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
       return null;
@@ -492,10 +510,10 @@ export const GameProvider = ({ children }) => {
       addNotification("Transaction error: " + error.message, 400, 300, "#FF3D00");
       return null;
     }
-  };
+  }, [connected, accounts, rdt, addNotification]);
 
   // Poll transaction status
-  const pollTransactionStatus = async (intentHash, machineId) => {
+  const pollTransactionStatus = useCallback(async (intentHash, machineId) => {
     if (!intentHash) return;
     
     try {
@@ -535,8 +553,202 @@ export const GameProvider = ({ children }) => {
       console.error("Error checking transaction status:", error);
       return false;
     }
-  };
+  }, [addNotification, loadGameFromServer]);
 
+  // Function to upgrade creature stats
+  const upgradeCreatureStats = useCallback(async (creature, statPoints) => {
+    if (!connected || !accounts || accounts.length === 0) {
+      addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
+      return null;
+    }
+    
+    try {
+      // Create the transaction manifest for upgrading stats
+      const response = await fetch('/api/getUpgradeStatsManifest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountAddress: accounts[0].address,
+          creatureId: creature.id,
+          energy: statPoints.energy || 0,
+          strength: statPoints.strength || 0,
+          magic: statPoints.magic || 0,
+          stamina: statPoints.stamina || 0,
+          speed: statPoints.speed || 0
+        }),
+        credentials: 'same-origin'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.manifest) {
+        throw new Error("Server didn't return upgrade manifest");
+      }
+      
+      // Send the transaction to the wallet
+      const hash = await initiateMintTransaction(data.manifest, 'creatureUpgrade');
+      
+      if (hash) {
+        // Start polling for status
+        const isComplete = await pollTransactionStatus(hash, 'creatureUpgrade');
+        if (isComplete) {
+          addNotification("Stats upgraded successfully!", 400, 300, "#4CAF50");
+          await loadCreatureNfts(); // Refresh the NFT data
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error upgrading stats:", error);
+      addNotification("Upgrade error: " + error.message, 400, 300, "#FF3D00");
+      return false;
+    }
+  }, [connected, accounts, addNotification, initiateMintTransaction, pollTransactionStatus, loadCreatureNfts]);
+
+  // Function to evolve a creature to next form
+  const evolveCreature = useCallback(async (creature) => {
+    if (!connected || !accounts || accounts.length === 0) {
+      addNotification("Connect Radix wallet and share account!", 400, 300, "#FF3D00");
+      return null;
+    }
+    
+    try {
+      // Create the transaction manifest for evolution
+      const response = await fetch('/api/getEvolveManifest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountAddress: accounts[0].address,
+          creatureId: creature.id
+        }),
+        credentials: 'same-origin'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.manifest) {
+        throw new Error("Server didn't return evolution manifest");
+      }
+      
+      // Send the transaction to the wallet
+      const hash = await initiateMintTransaction(data.manifest, 'creatureEvolve');
+      
+      if (hash) {
+        // Start polling for status
+        const isComplete = await pollTransactionStatus(hash, 'creatureEvolve');
+        if (isComplete) {
+          addNotification("Creature evolved successfully!", 400, 300, "#4CAF50");
+          await loadCreatureNfts(); // Refresh the NFT data
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error evolving creature:", error);
+      addNotification("Evolution error: " + error.message, 400, 300, "#FF3D00");
+      return false;
+    }
+  }, [connected, accounts, addNotification, initiateMintTransaction, pollTransactionStatus, loadCreatureNfts]);
+
+  // Function to handle activation of a cat's lair and show pet prompt
+  const handleCatLairActivation = useCallback((machine) => {
+    // First check if the user already has a cat
+    const hasCat = pets.some(pet => pet.type === 'cat');
+    
+    // Check if user has enough catnips to buy a pet
+    const hasEnoughCatNips = catNips >= 1500;
+    
+    // Only show the prompt if user has enough catnips and doesn't have a cat yet
+    if (!hasCat && hasEnoughCatNips) {
+      setSelectedCatLair(machine);
+      setShowPetBuyPrompt(true);
+      return true; // Indicating we're showing the prompt
+    }
+    
+    // Otherwise, just use normal activation
+    return false; // Indicating we didn't show the prompt
+  }, [pets, catNips]);
+
+  // Function to handle buying energy with CVX
+  const initiateBuyEnergy = useCallback(async (accountAddress) => {
+    if (!accountAddress) {
+      addNotification("No wallet address provided", 400, 300, "#FF3D00");
+      return false;
+    }
+    
+    if (!transactionService) {
+      addNotification("Transaction service not ready", 400, 300, "#FF3D00");
+      return false;
+    }
+    
+    try {
+      // Get the transaction manifest
+      const response = await PetService.buyEnergy(accountAddress);
+      const manifest = response.manifest;
+      
+      if (!manifest) {
+        addNotification("Failed to get transaction manifest", 400, 300, "#FF3D00");
+        return false;
+      }
+      
+      // Submit the transaction to the Radix wallet
+      const intentHash = await transactionService.sendTransaction(manifest);
+      
+      if (intentHash) {
+        // Start polling for status
+        transactionService.pollTransactionStatus(
+          intentHash, 
+          '/api/confirmEnergyPurchase',
+          {},
+          3000,
+          30
+        )
+        .then(statusData => {
+          if (statusData.status === "ok") {
+            // Transaction successful, update energy
+            setEnergy(parseFloat(statusData.newEnergy));
+            addNotification("Energy purchase successful! +500 Energy", 400, 300, "#4CAF50");
+          } else if (statusData.transactionStatus?.status === "Failed" || 
+                    statusData.transactionStatus?.status === "Rejected") {
+            addNotification("Energy purchase failed", 400, 300, "#FF3D00");
+          } else {
+            addNotification("Energy purchase status unknown. Check your wallet.", 400, 300, "#FF9800");
+          }
+        })
+        .catch(error => {
+          console.error("Error polling transaction status:", error);
+          addNotification("Error checking energy purchase status", 400, 300, "#FF3D00");
+        });
+        
+        addNotification("Energy purchase transaction sent!", 400, 300, "#FF9800");
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error initiating energy purchase:", error);
+      addNotification("Error initiating energy purchase", 400, 300, "#FF3D00");
+      return false;
+    }
+  }, [transactionService, addNotification]);
+
+  // Rest of the component implementation...
   // Pet operations
   const buyPet = async (petType, x, y, room, parentMachine) => {
     try {
@@ -631,105 +843,126 @@ export const GameProvider = ({ children }) => {
       return false;
     }
   };
-  
-  // Function to handle activation of a cat's lair and show pet prompt
-  const handleCatLairActivation = (machine) => {
-    // First check if the user already has a cat
-    const hasCat = pets.some(pet => pet.type === 'cat');
-    
-    // Check if user has enough catnips to buy a pet
-    const hasEnoughCatNips = catNips >= 1500;
-    
-    // Only show the prompt if user has enough catnips and doesn't have a cat yet
-    if (!hasCat && hasEnoughCatNips) {
-      setSelectedCatLair(machine);
-      setShowPetBuyPrompt(true);
-      return true; // Indicating we're showing the prompt
+
+  // Load creature NFTs when logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadCreatureNfts();
     }
-    
-    // Otherwise, just use normal activation
-    return false; // Indicating we didn't show the prompt
-  };
-  
-  // Function to check if a pet is being hovered over
-  const getPetAtPosition = (x, y) => {
-    // Only consider pets in the current room
-    const currentRoomPets = pets.filter(pet => (pet.room || 1) === currentRoom);
-    const petSize = gridSize * 1.5; // Slightly smaller than machine size
-    
-    return currentRoomPets.find((p) => {
-      return (
-        x >= p.x &&
-        x < p.x + petSize &&
-        y >= p.y &&
-        y < p.y + petSize
+  }, [isLoggedIn, loadCreatureNfts]);
+
+  // On mount => check Telegram session
+  useEffect(() => {
+    checkLoginStatus();
+  }, [checkLoginStatus]);
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|Opera Mini|IEMobile|WPDesktop/i.test(
+        navigator.userAgent
       );
-    });
+      setIsMobile(isMobileDevice);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Update animations (particles, notifications)
+  useEffect(() => {
+    const updateAnimations = () => {
+      setParticles(prev =>
+        prev
+          .map(p => ({
+            ...p,
+            x: p.x + p.speedX,
+            y: p.y + p.speedY,
+            life: p.life - 0.01,
+            size: p.size * 0.99
+          }))
+          .filter(p => p.life > 0)
+      );
+
+      setNotifications(prev =>
+        prev
+          .map(n => ({
+            ...n,
+            y: n.y - 0.3,
+            life: n.life - 0.01
+          }))
+          .filter(n => n.life > 0)
+      );
+    };
+    const interval = setInterval(updateAnimations, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Define build, upgrade, and activate methods - moved lower to avoid circular references
+  // Build / Upgrade / Activate
+  const buildMachine = async (type, x, y) => {
+    try {
+      const resp = await axios.post('/api/buildMachine', { 
+        machineType: type, 
+        x, 
+        y,
+        room: currentRoom
+      });
+      
+      setTcorvax(parseFloat(resp.data.newResources.tcorvax));
+      setCatNips(parseFloat(resp.data.newResources.catNips));
+      setEnergy(parseFloat(resp.data.newResources.energy));
+      
+      // Check if we just unlocked a new room
+      const newRoomsUnlocked = resp.data.roomsUnlocked || 1;
+      if (newRoomsUnlocked > roomsUnlocked) {
+        setRoomsUnlocked(newRoomsUnlocked);
+        setShowRoomUnlockMessage(true);
+        addNotification("New room unlocked! Click the arrow to navigate.", 400, 300, "#4CAF50");
+      }
+      
+      await loadGameFromServer();
+      addNotification(`Built ${type}!`, x + gridSize / 2, y - 20, "#4CAF50");
+      addParticles(x + gridSize, y + gridSize, machineTypes[type].particleColor || "#fff");
+    } catch (error) {
+      console.error('Error building machine:', error);
+      addNotification(
+        error.response?.data?.error || "Build error!",
+        x + gridSize / 2,
+        y - 20,
+        "#ff4444"
+      );
+    }
   };
 
-  // Function to handle buying energy with CVX - UPDATED
-  const initiateBuyEnergy = async (accountAddress) => {
-    if (!accountAddress) {
-      addNotification("No wallet address provided", 400, 300, "#FF3D00");
-      return false;
-    }
-    
-    if (!transactionService) {
-      addNotification("Transaction service not ready", 400, 300, "#FF3D00");
-      return false;
-    }
-    
+  const upgradeMachine = async (machineId) => {
     try {
-      // Get the transaction manifest
-      const response = await PetService.buyEnergy(accountAddress);
-      const manifest = response.manifest;
-      
-      if (!manifest) {
-        addNotification("Failed to get transaction manifest", 400, 300, "#FF3D00");
-        return false;
+      const resp = await axios.post('/api/upgradeMachine', { machineId });
+      setTcorvax(parseFloat(resp.data.newResources.tcorvax));
+      setCatNips(parseFloat(resp.data.newResources.catNips));
+      setEnergy(parseFloat(resp.data.newResources.energy));
+
+      const machine = machines.find(m => m.id === machineId);
+      if (machine) {
+        addParticles(machine.x + gridSize, machine.y + gridSize, "#FFD700", 30);
+        addNotification(
+          `Level Up => ${resp.data.newLevel}`,
+          machine.x + gridSize,
+          machine.y - 20,
+          "#FFD700"
+        );
       }
-      
-      // Submit the transaction to the Radix wallet
-      const intentHash = await transactionService.sendTransaction(manifest);
-      
-      if (intentHash) {
-        // Start polling for status
-        transactionService.pollTransactionStatus(
-          intentHash, 
-          '/api/confirmEnergyPurchase',
-          {},
-          3000,
-          30
-        )
-        .then(statusData => {
-          if (statusData.status === "ok") {
-            // Transaction successful, update energy
-            setEnergy(parseFloat(statusData.newEnergy));
-            addNotification("Energy purchase successful! +500 Energy", 400, 300, "#4CAF50");
-          } else if (statusData.transactionStatus?.status === "Failed" || 
-                    statusData.transactionStatus?.status === "Rejected") {
-            addNotification("Energy purchase failed", 400, 300, "#FF3D00");
-          } else {
-            addNotification("Energy purchase status unknown. Check your wallet.", 400, 300, "#FF9800");
-          }
-        })
-        .catch(error => {
-          console.error("Error polling transaction status:", error);
-          addNotification("Error checking energy purchase status", 400, 300, "#FF3D00");
-        });
-        
-        addNotification("Energy purchase transaction sent!", 400, 300, "#FF9800");
-        return true;
-      }
-      
-      return false;
+      await loadGameFromServer();
     } catch (error) {
-      console.error("Error initiating energy purchase:", error);
-      addNotification("Error initiating energy purchase", 400, 300, "#FF3D00");
-      return false;
+      console.error('Error upgrading machine:', error);
+      addNotification(
+        error.response?.data?.error || "Upgrade error!",
+        0, 0,
+        "#ff4444"
+      );
     }
   };
-  
+
   // Function to submit a CVX transaction
   const initiateCVXTransaction = async (manifest) => {
     if (!connected || !accounts || accounts.length === 0) {
@@ -1090,53 +1323,6 @@ export const GameProvider = ({ children }) => {
     }
   };
 
-  // On mount => check Telegram session
-  useEffect(() => {
-    checkLoginStatus();
-  }, [checkLoginStatus]);
-
-  // Detect mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|Opera Mini|IEMobile|WPDesktop/i.test(
-        navigator.userAgent
-      );
-      setIsMobile(isMobileDevice);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Update animations (particles, notifications)
-  useEffect(() => {
-    const updateAnimations = () => {
-      setParticles(prev =>
-        prev
-          .map(p => ({
-            ...p,
-            x: p.x + p.speedX,
-            y: p.y + p.speedY,
-            life: p.life - 0.01,
-            size: p.size * 0.99
-          }))
-          .filter(p => p.life > 0)
-      );
-
-      setNotifications(prev =>
-        prev
-          .map(n => ({
-            ...n,
-            y: n.y - 0.3,
-            life: n.life - 0.01
-          }))
-          .filter(n => n.life > 0)
-      );
-    };
-    const interval = setInterval(updateAnimations, 50);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <GameContext.Provider
       value={{
@@ -1148,7 +1334,7 @@ export const GameProvider = ({ children }) => {
         tcorvax,
         catNips,
         energy,
-        eggs, // Added eggs
+        eggs,
         machines,
         machineCount,
         player,
@@ -1234,15 +1420,25 @@ export const GameProvider = ({ children }) => {
         // Expose sCVX methods (mainly for compatibility)
         getSCvxBalance: getSCvxBalanceViaSDK,
         
-        // Creature NFTs - ADDED
+        // Creature NFTs
         creatureNfts,
         toolNfts,
         spellNfts,
         loadCreatureNfts,
 
-        // Add these to the contextValue object in the return statement
+        // Creature UI and functions
         showCreatureMinter,
         setShowCreatureMinter,
+        showMyCreaturesPanel,
+        setShowMyCreaturesPanel,
+        selectedCreature,
+        setSelectedCreature,
+        fetchUserCreatures,
+        creatureStatsData,
+        handleStatAllocation,
+        resetStatAllocation,
+        upgradeCreatureStats,
+        evolveCreature
       }}
     >
       {children}
