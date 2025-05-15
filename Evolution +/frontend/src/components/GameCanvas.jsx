@@ -121,6 +121,8 @@ const GameCanvas = () => {
       catImage: '/assets/Cat.png'
     };
 
+    console.log('Starting to load assets...');
+
     const loadImage = (src) => {
       return new Promise((resolve) => {
         const img = new Image();
@@ -868,34 +870,6 @@ const GameCanvas = () => {
       // Clear canvas
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-      // Use the GameCanvasRenderer to render the game
-      // This is done by directly manipulating the canvas context
-      // rather than using React's rendering system
-      
-      // The renderer component doesn't actually render itself in the DOM
-      // It just draws to the canvas context we provide
-      const renderer = (
-        <GameCanvasRenderer
-          canvasRef={canvasRef}
-          player={player}
-          currentRoom={currentRoom}
-          machines={machines}
-          pets={pets}
-          particles={particles}
-          notifications={notifications}
-          gridSize={gridSize}
-          assetsRef={assetsRef}
-          showMovePreview={showMovePreview}
-          moveCursorPosition={moveCursorPosition}
-          positionSelected={positionSelected}
-          movingMachine={movingMachine}
-          selectedPetToMove={selectedPetToMove}
-          inPetMoveMode={inPetMoveMode}
-          moveTargetRoom={moveTargetRoom}
-          machineTypes={machineTypes}
-        />
-      );
-
       // Move player (skip in move mode)
       if (!showMovePreview) {
         movePlayer();
@@ -948,6 +922,27 @@ const GameCanvas = () => {
           display: isLoggedIn ? 'block' : 'none',
           cursor: showMovePreview ? (positionSelected ? 'default' : 'move') : 'default'
         }}
+      />
+      
+      {/* Directly include GameCanvasRenderer */}
+      <GameCanvasRenderer
+        canvasRef={canvasRef}
+        player={player}
+        currentRoom={currentRoom}
+        machines={machines}
+        pets={pets}
+        particles={particles}
+        notifications={notifications}
+        gridSize={gridSize}
+        assetsRef={assetsRef}
+        showMovePreview={showMovePreview}
+        moveCursorPosition={moveCursorPosition}
+        positionSelected={positionSelected}
+        movingMachine={movingMachine}
+        selectedPetToMove={selectedPetToMove}
+        inPetMoveMode={inPetMoveMode}
+        moveTargetRoom={moveTargetRoom}
+        machineTypes={machineTypes}
       />
 
       {/* Move instructions overlay */}
