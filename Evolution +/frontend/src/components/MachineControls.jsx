@@ -1,6 +1,7 @@
-// src/components/MachineControls.jsx - Modified to work with the refactored structure
+// src/components/MachineControls.jsx - Modified to use EvolvingCreaturesContext
 import { useContext, useState } from 'react';
 import { GameContext } from '../context/GameContext';
+import { useEvolvingCreatures } from '../context/EvolvingCreaturesContext';
 import FomoHitMinter from './FomoHitMinter';
 import MoveMachines from './MoveMachines'; 
 
@@ -16,10 +17,14 @@ function MachineControls({ onSave }) {
     formatResource,
     player,
     isMobile,
-    setSelectedMachineToMove,
-    setShowCreatureMinter, // Use this from GameContext
-    setShowMyCreaturesPanel // Use this from GameContext
+    setSelectedMachineToMove
   } = useContext(GameContext);
+
+  // Use the Evolving Creatures context for NFT-related functionality
+  const {
+    setShowCreatureMinter,
+    setShowMyCreaturesPanel
+  } = useEvolvingCreatures();
 
   // State for accordion - start with all sections collapsed
   const [activeSection, setActiveSection] = useState(null);
@@ -72,12 +77,12 @@ function MachineControls({ onSave }) {
   
   // Handle Evolving Creatures minter
   const handleEvolvingCreaturesClick = () => {
-    setShowCreatureMinter(true); // Use the GameContext state
+    setShowCreatureMinter(true); // Use the EvolvingCreatures context
   };
   
   // Handle My Creatures panel
   const handleMyCreaturesClick = () => {
-    setShowMyCreaturesPanel(true); // Use the GameContext state
+    setShowMyCreaturesPanel(true); // Use the EvolvingCreatures context
   };
 
   // Compact format for resource cost
