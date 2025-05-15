@@ -1,4 +1,4 @@
-// src/components/MachineControls.jsx - Modified to add Evolving Creatures button and My Creatures panel
+// src/components/MachineControls.jsx - Modified to work with the refactored structure
 import { useContext, useState } from 'react';
 import { GameContext } from '../context/GameContext';
 import FomoHitMinter from './FomoHitMinter';
@@ -17,11 +17,11 @@ function MachineControls({ onSave }) {
     player,
     isMobile,
     setSelectedMachineToMove,
-    setShowCreatureMinter, // Get this from GameContext
-    setShowMyCreaturesPanel // Add this from GameContext
+    setShowCreatureMinter, // Use this from GameContext
+    setShowMyCreaturesPanel // Use this from GameContext
   } = useContext(GameContext);
 
-  // State for accordion - CHANGED to start with all sections collapsed (null)
+  // State for accordion - start with all sections collapsed
   const [activeSection, setActiveSection] = useState(null);
 
   // Group machines by type for the upgrade section
@@ -72,12 +72,12 @@ function MachineControls({ onSave }) {
   
   // Handle Evolving Creatures minter
   const handleEvolvingCreaturesClick = () => {
-    setShowCreatureMinter(true); // Update the GameContext state
+    setShowCreatureMinter(true); // Use the GameContext state
   };
   
   // Handle My Creatures panel
   const handleMyCreaturesClick = () => {
-    setShowMyCreaturesPanel(true); // Update the GameContext state
+    setShowMyCreaturesPanel(true); // Use the GameContext state
   };
 
   // Compact format for resource cost
