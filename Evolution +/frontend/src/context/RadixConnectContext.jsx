@@ -191,3 +191,4 @@ export const RadixConnectProvider = ({ children, dAppDefinitionAddress }) => {
     </RadixConnectContext.Provider>
   );
 };
+
