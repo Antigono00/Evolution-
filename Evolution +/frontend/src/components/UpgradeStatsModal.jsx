@@ -325,5 +325,3 @@ const UpgradeStatsModal = ({ creature, onClose, onConfirm }) => {
 };
 
 export default UpgradeStatsModal;
-
-export default UpgradeStatsModal;
