@@ -1,22 +1,27 @@
-// src/components/MyCreaturesPanel.jsx
+// src/components/MyCreaturesPanel.jsx - Updated to use EvolvingCreaturesContext
 import React, { useContext, useState, useEffect } from 'react';
 import { GameContext } from '../context/GameContext';
+import { useEvolvingCreatures } from '../context/EvolvingCreaturesContext';
 import { useRadixConnect } from '../context/RadixConnectContext';
 import CreatureDetails from './CreatureDetails';
 import UpgradeStatsModal from './UpgradeStatsModal';
 
 const MyCreaturesPanel = ({ onClose }) => {
-  // Game context
+  // Game context for UI and notifications
+  const {
+    isMobile,
+    addNotification,
+  } = useContext(GameContext);
+
+  // Evolving Creatures context for creature functionality
   const {
     creatureNfts,
     fetchUserCreatures,
     selectedCreature,
     setSelectedCreature,
-    isMobile,
-    addNotification,
     upgradeCreatureStats,
     evolveCreature
-  } = useContext(GameContext);
+  } = useEvolvingCreatures();
 
   // Radix Connect context
   const {
