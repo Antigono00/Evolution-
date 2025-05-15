@@ -1,10 +1,10 @@
-// src/components/MachineControls.jsx - Modified to add Evolving Creatures button
+// src/components/MachineControls.jsx - Modified to add Evolving Creatures button and My Creatures panel
 import { useContext, useState } from 'react';
 import { GameContext } from '../context/GameContext';
 import FomoHitMinter from './FomoHitMinter';
 import MoveMachines from './MoveMachines'; 
 
-function MachineControls() {
+function MachineControls({ onSave }) {
   const {
     canBuildMachine,
     canAfford,
@@ -17,7 +17,8 @@ function MachineControls() {
     player,
     isMobile,
     setSelectedMachineToMove,
-    setShowCreatureMinter // Get this from GameContext
+    setShowCreatureMinter, // Get this from GameContext
+    setShowMyCreaturesPanel // Add this from GameContext
   } = useContext(GameContext);
 
   // State for accordion - CHANGED to start with all sections collapsed (null)
@@ -73,6 +74,11 @@ function MachineControls() {
   const handleEvolvingCreaturesClick = () => {
     setShowCreatureMinter(true); // Update the GameContext state
   };
+  
+  // Handle My Creatures panel
+  const handleMyCreaturesClick = () => {
+    setShowMyCreaturesPanel(true); // Update the GameContext state
+  };
 
   // Compact format for resource cost
   const formatCost = (cost) => {
@@ -89,8 +95,9 @@ function MachineControls() {
 
   return (
     <div className="machine-controls">
-      {/* Simple Evolving Creatures Button */}
-      <div style={{ marginBottom: '15px', textAlign: 'center' }}>
+      {/* Evolving Creatures Buttons Section */}
+      <div style={{ marginBottom: '15px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Mint Creature Button */}
         <button
           onClick={handleEvolvingCreaturesClick}
           className="creature-mint-button"
@@ -108,10 +115,38 @@ function MachineControls() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            margin: '0 auto'
+            margin: '0 auto',
+            width: '100%',
+            maxWidth: '180px'
           }}
         >
           🥚 Mint Creature
+        </button>
+        
+        {/* New My Creatures Button */}
+        <button
+          onClick={handleMyCreaturesClick}
+          className="my-creatures-button"
+          style={{
+            backgroundColor: '#FF5722',
+            color: 'white',
+            padding: '8px 15px',
+            borderRadius: '6px',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            margin: '0 auto',
+            width: '100%',
+            maxWidth: '180px'
+          }}
+        >
+          🐉 My Creatures
         </button>
       </div>
       
@@ -282,6 +317,26 @@ function MachineControls() {
           machineId={selectedFomoHit.id} 
           onClose={() => setShowMinter(false)} 
         />
+      )}
+      
+      {/* Save button */}
+      {onSave && (
+        <button 
+          onClick={onSave}
+          style={{ 
+            marginTop: '20px',
+            width: '100%',
+            padding: '10px',
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          Save Layout
+        </button>
       )}
     </div>
   );
