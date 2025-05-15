@@ -1,16 +1,21 @@
-// src/components/EvolvingCreatureMinter.jsx
+// src/components/EvolvingCreatureMinter.jsx - Updated to use EvolvingCreaturesContext
 import { useContext, useState, useEffect } from 'react';
 import { GameContext } from '../context/GameContext';
+import { useEvolvingCreatures } from '../context/EvolvingCreaturesContext';
 import { useRadixConnect } from '../context/RadixConnectContext';
 
 const EvolvingCreatureMinter = ({ onClose }) => {
-  // Game context
+  // Game context for UI elements
+  const {
+    isMobile
+  } = useContext(GameContext);
+
+  // Evolving Creatures context
   const {
     initiateMintTransaction,
     pollTransactionStatus,
-    formatResource,
-    isMobile
-  } = useContext(GameContext);
+    formatResource
+  } = useEvolvingCreatures();
 
   // Radix Connect context
   const {
