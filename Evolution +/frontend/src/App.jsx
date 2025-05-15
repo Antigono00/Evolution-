@@ -1,4 +1,4 @@
-// src/App.jsx - Updated with Room Navigation
+// src/App.jsx - Updated with Room Navigation and Evolving Creatures
 import { useContext, useEffect } from 'react';
 import { GameContext } from './context/GameContext';
 import TelegramLogin from './components/TelegramLogin';
@@ -9,7 +9,7 @@ import WelcomeMessage from './components/WelcomeMessage';
 import LowCorvaxMessage from './components/LowCorvaxMessage';
 import HelpButton from './components/HelpButton';
 import MobileRadixWrapper from './components/MobileRadixWrapper';
-import RoomUnlockMessage from './components/RoomUnlockMessage'; // Add this import
+import RoomUnlockMessage from './components/RoomUnlockMessage';
 
 // Import the Radix Connect Provider & Button
 import { RadixConnectProvider } from './context/RadixConnectContext';
@@ -28,14 +28,14 @@ function App() {
     loadGameFromServer,
     setAssetsLoaded,
     isMobile,
-    showRoomUnlockMessage // Add this state from context
+    showRoomUnlockMessage
   } = useContext(GameContext);
 
   // Preload images
   useEffect(() => {
     const imagePaths = [
       '/assets/Background.png',
-      '/assets/Background2.png', // Add second room background
+      '/assets/Background2.png',
       '/assets/Player.png',
       '/assets/CatsLair.png',
       '/assets/Reactor.png',
